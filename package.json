@@ -1,0 +1,23 @@
+{
+  "name": "gaobeidian-shangkeyou-miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "node ./scripts/check-workspace.mjs",
+    "dev:api": "cd apps/api && go run ./cmd/server",
+    "test:api": "cd apps/api && go test ./...",
+    "seed:reset": "cd apps/api && go run ./cmd/seed --reset",
+    "dev:admin": "pnpm --dir apps/admin-web dev",
+    "build:admin": "pnpm --dir apps/admin-web build",
+    "install:miniapp": "pnpm --dir apps/miniapp install",
+    "dev:miniapp": "node -e \"console.log('Open apps/miniapp in WeChat Developer Tools.')\""
+  }
+}
