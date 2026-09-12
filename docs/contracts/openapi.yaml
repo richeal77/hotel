@@ -1,0 +1,1529 @@
+openapi: 3.0.3
+info:
+  title: Gaobeidian Shangkeyou Miniapp Demo API
+  version: 0.1.0
+  description: Frozen phase 1 API contract for the local demo.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local demo on development computer
+  - url: http://{lanIp}:8080/api/v1
+    description: Phone preview on the same Wi-Fi
+    variables:
+      lanIp:
+        default: 192.168.1.100
+security:
+  - memberBearerAuth: []
+  - staffBearerAuth: []
+tags:
+  - name: Auth
+  - name: Miniapp
+  - name: Admin
+  - name: Demo
+paths:
+  /auth/mock-login:
+    post:
+      tags: [Auth]
+      summary: Mock miniapp login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MockLoginRequest"
+      responses:
+        "200":
+          description: Login result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member_token, member]
+                        properties:
+                          member_token:
+                            type: string
+                            example: mock_member_token
+                          member:
+                            $ref: "#/components/schemas/MemberAuthProfile"
+  /auth/send-code:
+    post:
+      tags: [Auth]
+      summary: Send mock SMS code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendCodeRequest"
+      responses:
+        "200":
+          description: Mock SMS code
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [mock_code, expire_seconds]
+                        properties:
+                          mock_code:
+                            type: string
+                            enum: ["666666"]
+                          expire_seconds:
+                            type: integer
+                            example: 300
+  /auth/bind-phone:
+    post:
+      tags: [Auth]
+      summary: Bind member phone with mock code
+      security:
+        - memberBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BindPhoneRequest"
+      responses:
+        "200":
+          description: Bound member
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member]
+                        properties:
+                          member:
+                            $ref: "#/components/schemas/MemberAuthProfile"
+  /members/join:
+    post:
+      tags: [Miniapp]
+      summary: Join membership
+      security:
+        - memberBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinMemberRequest"
+      responses:
+        "200":
+          description: Joined member and issued gift coupons
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member, issued_coupons]
+                        properties:
+                          member:
+                            $ref: "#/components/schemas/Member"
+                          issued_coupons:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/CouponSummary"
+  /mini/home:
+    get:
+      tags: [Miniapp]
+      summary: Miniapp home data
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Home data
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MiniHome"
+  /members/me:
+    get:
+      tags: [Miniapp]
+      summary: Current member profile
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Current member
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member]
+                        properties:
+                          member:
+                            $ref: "#/components/schemas/Member"
+                          member_code:
+                            type: string
+                            example: mbr_001
+  /coupons/my:
+    get:
+      tags: [Miniapp]
+      summary: Current member coupons
+      security:
+        - memberBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CouponStatusQuery"
+      responses:
+        "200":
+          description: Coupon list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Coupon"
+  /wallet/me:
+    get:
+      tags: [Miniapp]
+      summary: Current member wallet
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Wallet account and ledger
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/WalletAccount"
+  /bookings:
+    post:
+      tags: [Miniapp]
+      summary: Submit booking intent
+      security:
+        - memberBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "200":
+          description: Created booking
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [order]
+                        properties:
+                          order:
+                            $ref: "#/components/schemas/BookingOrderSummary"
+  /bookings/my:
+    get:
+      tags: [Miniapp]
+      summary: Current member bookings
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Booking list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/BookingOrder"
+  /referrals/me:
+    get:
+      tags: [Miniapp]
+      summary: Current member referral page
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Referral data
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ReferralPage"
+  /referrals/bind:
+    post:
+      tags: [Miniapp]
+      summary: Bind direct referrer
+      security:
+        - memberBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [referrer_member_id]
+              properties:
+                referrer_member_id:
+                  type: string
+                  example: mbr_001
+      responses:
+        "200":
+          description: Bound referral relation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [relation]
+                        properties:
+                          relation:
+                            $ref: "#/components/schemas/ReferralRelation"
+  /admin/auth/login:
+    post:
+      tags: [Admin]
+      summary: Staff login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Staff login result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [access_token, staff]
+                        properties:
+                          access_token:
+                            type: string
+                            example: mock_staff_token
+                          staff:
+                            $ref: "#/components/schemas/StaffUser"
+  /admin/dashboard/summary:
+    get:
+      tags: [Admin]
+      summary: Owner dashboard summary
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-09-12"
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DashboardSummary"
+  /admin/bookings:
+    get:
+      tags: [Admin]
+      summary: Admin booking list
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BookingStatusQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+      responses:
+        "200":
+          description: Paged bookings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/Page"
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: "#/components/schemas/BookingOrder"
+  /admin/bookings/{order_id}/status:
+    patch:
+      tags: [Admin]
+      summary: Update booking status
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingStatusRequest"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [order]
+                        properties:
+                          order:
+                            $ref: "#/components/schemas/BookingOrder"
+  /admin/members:
+    get:
+      tags: [Admin]
+      summary: Admin member search
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "13800138001"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+      responses:
+        "200":
+          description: Paged members
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/Page"
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: "#/components/schemas/Member"
+  /admin/members/{member_id}/status:
+    patch:
+      tags: [Admin]
+      summary: Update member status
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MemberIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberStatusRequest"
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member]
+                        properties:
+                          member:
+                            $ref: "#/components/schemas/Member"
+  /admin/redemption/lookup:
+    get:
+      tags: [Admin]
+      summary: Lookup member redemption data
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "13800138001"
+      responses:
+        "200":
+          description: Redemption lookup
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RedemptionLookup"
+  /admin/coupons/{coupon_id}/redeem:
+    post:
+      tags: [Admin]
+      summary: Redeem coupon
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CouponIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemCouponRequest"
+      responses:
+        "200":
+          description: Redeemed coupon
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [coupon]
+                        properties:
+                          coupon:
+                            $ref: "#/components/schemas/Coupon"
+  /admin/wallets/{member_id}/adjust:
+    post:
+      tags: [Admin]
+      summary: Manually adjust wallet
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MemberIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustWalletRequest"
+      responses:
+        "200":
+          description: Wallet adjustment result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [wallet, ledger]
+                        properties:
+                          wallet:
+                            $ref: "#/components/schemas/WalletAccount"
+                          ledger:
+                            $ref: "#/components/schemas/WalletLedger"
+  /admin/referrals/rewards:
+    get:
+      tags: [Admin]
+      summary: Referral rewards list
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/RewardStatus"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+      responses:
+        "200":
+          description: Paged referral rewards
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/Page"
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: "#/components/schemas/ReferralReward"
+  /admin/rules:
+    get:
+      tags: [Admin]
+      summary: Get demo rule config
+      security:
+        - staffBearerAuth: []
+      responses:
+        "200":
+          description: Rule config
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RuleConfig"
+    patch:
+      tags: [Admin]
+      summary: Update demo rule config
+      security:
+        - staffBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuleConfig"
+      responses:
+        "200":
+          description: Updated rule config
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RuleConfig"
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Audit log list
+      security:
+        - staffBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+      responses:
+        "200":
+          description: Paged audit logs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/Page"
+                          - type: object
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: "#/components/schemas/AuditLog"
+  /admin/demo/state:
+    get:
+      tags: [Demo]
+      summary: Get demo state
+      security:
+        - staffBearerAuth: []
+      responses:
+        "200":
+          description: Demo state
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DemoState"
+  /admin/demo/reset:
+    post:
+      tags: [Demo]
+      summary: Reset demo data
+      security:
+        - staffBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm_text]
+              properties:
+                confirm_text:
+                  type: string
+                  enum: [RESET]
+      responses:
+        "200":
+          description: Demo reset result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DemoState"
+components:
+  securitySchemes:
+    memberBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    staffBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageQuery:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeQuery:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    CouponStatusQuery:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/CouponStatus"
+    BookingStatusQuery:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/BookingStatus"
+    MemberIdPath:
+      name: member_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: mbr_001
+    OrderIdPath:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: ord_001
+    CouponIdPath:
+      name: coupon_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: cpn_001
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          nullable: true
+    Page:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: {}
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+    ErrorCode:
+      type: integer
+      enum: [0, 40000, 40001, 40100, 40300, 40400, 40900, 42900, 50000]
+    Role:
+      type: string
+      enum: [boss, manager, frontdesk, finance]
+    MemberStatus:
+      type: string
+      enum: [active, blocked]
+    BookingStatus:
+      type: string
+      enum: [pending_confirm, confirmed, checked_in, checked_out, cancelled]
+    PaidStatus:
+      type: string
+      enum: [pay_at_hotel, pending, paid]
+    CouponStatus:
+      type: string
+      enum: [available, used, expired, voided]
+    CouponType:
+      type: string
+      enum: [cash_discount, service_coupon, late_checkout]
+    WalletLedgerStatus:
+      type: string
+      enum: [frozen, available, used, expired, reversed]
+    WalletLedgerType:
+      type: string
+      enum: [stay_cashback, referral_reward, manual_grant, redeem, expire, reverse]
+    RewardStatus:
+      type: string
+      enum: [pending, frozen, available, reversed]
+    GiftChoice:
+      type: string
+      enum: [laundry, late_checkout, next_stay_5]
+    MockLoginRequest:
+      type: object
+      properties:
+        scene:
+          type: string
+          example: frontdesk_qr
+        referrer_member_id:
+          type: string
+          example: mbr_001
+    SendCodeRequest:
+      type: object
+      required: [phone, purpose]
+      properties:
+        phone:
+          type: string
+          example: "13800138001"
+        purpose:
+          type: string
+          enum: [bind_phone]
+    BindPhoneRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone:
+          type: string
+          example: "13800138001"
+        code:
+          type: string
+          enum: ["666666"]
+    JoinMemberRequest:
+      type: object
+      required: [nickname, phone, source, scene, accepted_privacy, accepted_member_rule, gift_choice]
+      properties:
+        nickname:
+          type: string
+          example: Zhang San
+        phone:
+          type: string
+          example: "13800138001"
+        source:
+          type: string
+          example: frontdesk
+        scene:
+          type: string
+          example: frontdesk_qr
+        referrer_member_id:
+          type: string
+          example: ""
+        accepted_privacy:
+          type: boolean
+          example: true
+        accepted_member_rule:
+          type: boolean
+          example: true
+        gift_choice:
+          $ref: "#/components/schemas/GiftChoice"
+    AdminLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: boss
+        password:
+          type: string
+          enum: ["666666"]
+    MemberAuthProfile:
+      type: object
+      required: [id, openid, phone, is_phone_bound]
+      properties:
+        id:
+          type: string
+          example: mbr_001
+        openid:
+          type: string
+          example: mock_openid_001
+        phone:
+          type: string
+          example: "13800138001"
+        is_phone_bound:
+          type: boolean
+          example: true
+    Member:
+      type: object
+      required: [id, openid, phone, nickname, source, source_scene, status, join_time, stay_count, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: mbr_001
+        openid:
+          type: string
+          example: mock_openid_001
+        phone:
+          type: string
+          example: "13800138001"
+        nickname:
+          type: string
+          example: Zhang San
+        source:
+          type: string
+          example: frontdesk
+        source_scene:
+          type: string
+          example: frontdesk_qr
+        referrer_member_id:
+          type: string
+          example: mbr_000
+        status:
+          $ref: "#/components/schemas/MemberStatus"
+        join_time:
+          type: string
+          format: date-time
+        stay_count:
+          type: integer
+          example: 1
+        last_stay_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    StaffUser:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          example: stf_boss
+        name:
+          type: string
+          example: Boss
+        role:
+          $ref: "#/components/schemas/Role"
+    Hotel:
+      type: object
+      required: [name, address, phone, tags]
+      properties:
+        name:
+          type: string
+          example: Gaobeidian Shangkeyou
+        address:
+          type: string
+          example: Hebei Baoding Gaobeidian core business street, near old railway station
+        phone:
+          type: string
+          example: "0312-0000000"
+        tags:
+          type: array
+          items:
+            type: string
+          example: [parking, laundry, invoice, mahjong]
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+    MiniHome:
+      type: object
+      required: [hotel, today_member_price_cent, wallet_balance_cent, coupon_count, booking_count, referral_summary]
+      properties:
+        hotel:
+          $ref: "#/components/schemas/Hotel"
+        today_member_price_cent:
+          type: integer
+          example: 8000
+        wallet_balance_cent:
+          type: integer
+          example: 240
+        coupon_count:
+          type: integer
+          example: 2
+        booking_count:
+          type: integer
+          example: 1
+        referral_summary:
+          $ref: "#/components/schemas/ReferralSummary"
+    CouponSummary:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+          example: cpn_001
+        name:
+          type: string
+          example: Laundry coupon 1 time
+        status:
+          $ref: "#/components/schemas/CouponStatus"
+    Coupon:
+      allOf:
+        - $ref: "#/components/schemas/CouponSummary"
+        - type: object
+          required: [type, expire_at, use_rule]
+          properties:
+            template_id:
+              type: string
+              example: cpt_001
+            member_id:
+              type: string
+              example: mbr_001
+            type:
+              $ref: "#/components/schemas/CouponType"
+            value_cent:
+              type: integer
+              example: 500
+            received_at:
+              type: string
+              format: date-time
+            expire_at:
+              type: string
+              format: date-time
+            used_at:
+              type: string
+              nullable: true
+            used_order_id:
+              type: string
+              nullable: true
+            use_rule:
+              type: string
+              example: Use during stay
+    WalletAccount:
+      type: object
+      required: [balance_cent, total_granted_cent, total_used_cent, ledgers]
+      properties:
+        balance_cent:
+          type: integer
+          example: 240
+        total_granted_cent:
+          type: integer
+          example: 240
+        total_used_cent:
+          type: integer
+          example: 0
+        ledgers:
+          type: array
+          items:
+            $ref: "#/components/schemas/WalletLedger"
+    WalletLedger:
+      type: object
+      required: [id, member_id, type, amount_cent, status, reason, operator_staff_id, created_at]
+      properties:
+        id:
+          type: string
+          example: wlg_001
+        member_id:
+          type: string
+          example: mbr_001
+        order_id:
+          type: string
+          example: ord_001
+        type:
+          $ref: "#/components/schemas/WalletLedgerType"
+        amount_cent:
+          type: integer
+          example: 240
+        status:
+          $ref: "#/components/schemas/WalletLedgerStatus"
+        reason:
+          type: string
+          example: 3 percent cashback after checkout
+        expire_at:
+          type: string
+          format: date-time
+        operator_staff_id:
+          type: string
+          example: system
+        created_at:
+          type: string
+          format: date-time
+    CreateBookingRequest:
+      type: object
+      required: [checkin_date, checkout_date, room_type, arrival_time, contact_name, phone]
+      properties:
+        checkin_date:
+          type: string
+          format: date
+          example: "2026-09-20"
+        checkout_date:
+          type: string
+          format: date
+          example: "2026-09-21"
+        room_type:
+          type: string
+          example: Standard king room
+        arrival_time:
+          type: string
+          example: "20:00"
+        contact_name:
+          type: string
+          example: Zhang San
+        phone:
+          type: string
+          example: "13800138001"
+        remark:
+          type: string
+          example: Quiet room preferred
+    BookingOrderSummary:
+      type: object
+      required: [id, status, status_text]
+      properties:
+        id:
+          type: string
+          example: ord_001
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+        status_text:
+          type: string
+          example: Pending front desk confirmation
+    BookingOrder:
+      allOf:
+        - $ref: "#/components/schemas/BookingOrderSummary"
+        - type: object
+          required: [member_id, phone, contact_name, room_type, checkin_date, checkout_date, arrival_time, channel, source, estimated_amount_cent, paid_status, created_at, updated_at]
+          properties:
+            member_id:
+              type: string
+              example: mbr_001
+            phone:
+              type: string
+              example: "13800138001"
+            contact_name:
+              type: string
+              example: Zhang San
+            room_type:
+              type: string
+              example: Standard king room
+            checkin_date:
+              type: string
+              format: date
+            checkout_date:
+              type: string
+              format: date
+            arrival_time:
+              type: string
+              example: "20:00"
+            channel:
+              type: string
+              example: miniapp
+            source:
+              type: string
+              example: frontdesk
+            remark:
+              type: string
+            estimated_amount_cent:
+              type: integer
+              example: 8000
+            actual_amount_cent:
+              type: integer
+              example: 8000
+            paid_status:
+              $ref: "#/components/schemas/PaidStatus"
+            operator_staff_id:
+              type: string
+              example: stf_boss
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    UpdateBookingStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+        actual_amount_cent:
+          type: integer
+          example: 8000
+        remark:
+          type: string
+          example: Confirmed by phone
+    ReferralSummary:
+      type: object
+      required: [referred_count, available_reward_cent]
+      properties:
+        referred_count:
+          type: integer
+          example: 1
+        referred_members:
+          type: integer
+          example: 2
+        referred_orders:
+          type: integer
+          example: 1
+        pending_reward_cent:
+          type: integer
+          example: 0
+        available_reward_cent:
+          type: integer
+          example: 400
+    ReferralPage:
+      type: object
+      required: [share_scene, share_qr_text, summary, rewards]
+      properties:
+        share_scene:
+          type: string
+          example: referrer=mbr_001
+        share_qr_text:
+          type: string
+          example: demo://miniapp?referrer=mbr_001
+        summary:
+          $ref: "#/components/schemas/ReferralSummary"
+        rewards:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferralReward"
+    ReferralRelation:
+      type: object
+      required: [id, referrer_member_id, referred_member_id, created_at]
+      properties:
+        id:
+          type: string
+          example: rfr_001
+        referrer_member_id:
+          type: string
+          example: mbr_001
+        referred_member_id:
+          type: string
+          example: mbr_002
+        created_at:
+          type: string
+          format: date-time
+    ReferralReward:
+      type: object
+      required: [id, referrer_member_id, referred_member_id, order_id, actual_amount_cent, reward_rate, reward_amount_cent, status, created_at]
+      properties:
+        id:
+          type: string
+          example: rwd_001
+        referrer_member_id:
+          type: string
+          example: mbr_001
+        referred_member_id:
+          type: string
+          example: mbr_002
+        order_id:
+          type: string
+          example: ord_002
+        actual_amount_cent:
+          type: integer
+          example: 8000
+        reward_rate:
+          type: number
+          format: double
+          example: 0.05
+        reward_amount_cent:
+          type: integer
+          example: 400
+        status:
+          $ref: "#/components/schemas/RewardStatus"
+        created_at:
+          type: string
+          format: date-time
+        settled_at:
+          type: string
+          format: date-time
+    UpdateMemberStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/MemberStatus"
+        reason:
+          type: string
+          example: Suspected abuse
+    RedemptionLookup:
+      type: object
+      required: [member, coupons, wallet_balance_cent, recent_orders]
+      properties:
+        member:
+          $ref: "#/components/schemas/Member"
+        coupons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Coupon"
+        wallet_balance_cent:
+          type: integer
+          example: 240
+        recent_orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookingOrder"
+    RedeemCouponRequest:
+      type: object
+      required: [order_id]
+      properties:
+        order_id:
+          type: string
+          example: ord_001
+        remark:
+          type: string
+          example: Front desk redeemed laundry coupon
+    AdjustWalletRequest:
+      type: object
+      required: [amount_cent, type, reason]
+      properties:
+        amount_cent:
+          type: integer
+          example: 500
+        type:
+          type: string
+          enum: [manual_grant, reverse]
+        reason:
+          type: string
+          example: Guest complaint compensation
+    RuleConfig:
+      type: object
+      required: [cashback_rate, cashback_valid_days, cashback_order_limit_cent, referral_rate, referral_order_limit_cent, new_member_gifts]
+      properties:
+        cashback_rate:
+          type: number
+          format: double
+          example: 0.03
+        cashback_valid_days:
+          type: integer
+          example: 90
+        cashback_order_limit_cent:
+          type: integer
+          example: 1000
+        referral_rate:
+          type: number
+          format: double
+          example: 0.05
+        referral_order_limit_cent:
+          type: integer
+          example: 1000
+        new_member_gifts:
+          type: array
+          items:
+            $ref: "#/components/schemas/GiftChoice"
+          example: [laundry, late_checkout, next_stay_5]
+        special_price_coupon_allowed:
+          type: boolean
+          default: true
+        referral_settle_mode:
+          type: string
+          enum: [immediate, t_plus_3]
+          default: immediate
+    DashboardSummary:
+      type: object
+      required: [today_members, today_orders, today_coupon_used, month_repeat_room_nights, month_referral_room_nights, month_wallet_granted_cent, month_wallet_used_cent, frontdesk_rank, source_ratio]
+      properties:
+        today_members:
+          type: integer
+          example: 8
+        today_orders:
+          type: integer
+          example: 3
+        today_coupon_used:
+          type: integer
+          example: 2
+        month_repeat_room_nights:
+          type: integer
+          example: 12
+        month_referral_room_nights:
+          type: integer
+          example: 4
+        month_wallet_granted_cent:
+          type: integer
+          example: 2400
+        month_wallet_used_cent:
+          type: integer
+          example: 500
+        frontdesk_rank:
+          type: array
+          items:
+            type: object
+            required: [staff_name, joined_members]
+            properties:
+              staff_name:
+                type: string
+                example: Front desk A
+              joined_members:
+                type: integer
+                example: 5
+        source_ratio:
+          type: array
+          items:
+            type: object
+            required: [source, count]
+            properties:
+              source:
+                type: string
+                example: frontdesk
+              count:
+                type: integer
+                example: 5
+    AuditLog:
+      type: object
+      required: [id, operator_staff_id, action, target_type, target_id, summary, created_at]
+      properties:
+        id:
+          type: string
+          example: aud_001
+        operator_staff_id:
+          type: string
+          example: stf_boss
+        operator_name:
+          type: string
+          example: Boss
+        action:
+          type: string
+          example: booking.status.update
+        target_type:
+          type: string
+          example: booking_order
+        target_id:
+          type: string
+          example: ord_001
+        summary:
+          type: string
+          example: pending_confirm -> confirmed
+        before:
+          type: object
+          additionalProperties: true
+        after:
+          type: object
+          additionalProperties: true
+        ip:
+          type: string
+          example: 127.0.0.1
+        created_at:
+          type: string
+          format: date-time
+    DemoState:
+      type: object
+      required: [member_count, order_count, coupon_count, wallet_ledger_count, referral_reward_count, audit_log_count, simulated_date, immediate_settlement]
+      properties:
+        member_count:
+          type: integer
+          example: 5
+        order_count:
+          type: integer
+          example: 4
+        coupon_count:
+          type: integer
+          example: 8
+        wallet_ledger_count:
+          type: integer
+          example: 3
+        referral_reward_count:
+          type: integer
+          example: 2
+        audit_log_count:
+          type: integer
+          example: 1
+        simulated_date:
+          type: string
+          format: date
+          example: "2026-09-12"
+        immediate_settlement:
+          type: boolean
+          example: true
