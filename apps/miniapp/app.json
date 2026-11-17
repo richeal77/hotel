@@ -1,0 +1,22 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/join/index",
+    "pages/member-code/index",
+    "pages/coupons/index",
+    "pages/wallet/index",
+    "pages/booking/index",
+    "pages/orders/index",
+    "pages/referral/index",
+    "pages/profile/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "高碑店尚客优",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f7fb",
+    "backgroundTextStyle": "dark"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,11 @@
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.radio-row switch {
+  margin-right: 18rpx;
+}
+
+.save-btn {
+  margin-top: 22rpx;
+}

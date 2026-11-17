@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">{{apiModeText}} · 会员码演示</text>
+  </view>
+
+  <view class="section panel member-card">
+    <view class="panel-title">会员码</view>
+    <view class="member-code">{{memberCode}}</view>
+    <view class="qr-box">
+      <view class="qr-inner">
+        <text>{{memberCode}}</text>
+      </view>
+    </view>
+    <view class="list-meta">{{member.nickname || "演示住客"}} · {{maskedPhone}}</view>
+    <view class="list-meta">{{sceneText}}</view>
+    <view class="btn-row">
+      <button class="secondary-btn" bindtap="copyCode">复制会员码</button>
+      <button class="primary-btn" bindtap="goJoin">绑定手机号</button>
+    </view>
+  </view>
+</view>

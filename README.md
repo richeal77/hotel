@@ -1,6 +1,6 @@
 # Gaobeidian Shangkeyou Miniapp Demo
 
-Phase 1 goal: build a local demo for the hotel membership miniapp. All external services are mocked.
+Phase 1 is a local demo for the hotel membership miniapp. All external services are mocked. Phase 2 API changes are specified in `docs/contracts/phase-2-changes.md` but are not implemented yet.
 
 ## Repository Root
 
@@ -11,15 +11,15 @@ Use this `hotel/` directory as the code repository root.
 ```text
 apps/
   api/        # Go/Gin backend, mock services, local JSON storage
-  admin-web/  # Vue 3 + Vite + Element Plus admin console
+  admin-web/  # Node-served static admin console
   miniapp/    # WeChat native miniapp user client
 docs/
-  contracts/  # Frozen API contract
+  contracts/  # Phase 1 API and phase 2 planned changes
 ```
 
-## Frozen API Contract
+## API Contract
 
-The phase 1 contract is `docs/contracts/openapi.yaml`.
+The canonical contract is `docs/contracts/openapi.yaml`; see `docs/contracts/phase-2-changes.md` for the next phase.
 
 All AI workers and developers must follow it:
 
@@ -44,7 +44,7 @@ pnpm install
 pnpm run check
 ```
 
-The current repository only establishes the monorepo foundation. The commands below are the stable entry points for later API, admin-web, and miniapp scaffolding.
+The phase 1 API, admin web and miniapp code is present. The phase 2 operations in OpenAPI are specifications for future implementation.
 
 ## Development Commands
 
@@ -65,6 +65,8 @@ Backend tests and demo reset:
 
 ```bash
 pnpm run test:api
+pnpm run test:admin
+pnpm run test:miniapp
 pnpm run seed:reset
 ```
 

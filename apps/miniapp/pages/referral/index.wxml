@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">{{apiModeText}} · 直接推荐一层</text>
+  </view>
+
+  <view class="section panel">
+    <view class="panel-title">推荐码</view>
+    <view class="code-box">{{pageData.share_qr_text || sharePath}}</view>
+    <view class="btn-row">
+      <button class="secondary-btn" bindtap="copyShareText">复制推荐码</button>
+      <button class="primary-btn" open-type="share">分享</button>
+    </view>
+  </view>
+
+  <view class="section stat-grid">
+    <view class="stat">
+      <text class="stat-value">{{pageData.summary.referred_count || 0}}</text>
+      <text class="stat-label">已推荐</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{availableRewardText}}</text>
+      <text class="stat-label">可用奖励</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{pendingRewardText}}</text>
+      <text class="stat-label">待结算</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{pageData.summary.referred_orders || 0}}</text>
+      <text class="stat-label">推荐订单</text>
+    </view>
+  </view>
+
+  <view class="section panel" wx:if="{{context.referrerMemberId}}">
+    <view class="panel-title">识别到推荐人</view>
+    <view class="list-meta">{{context.referrerMemberId}}</view>
+    <button class="primary-btn bind-btn" bindtap="bindReferrer">绑定推荐关系</button>
+    <view class="list-meta" wx:if="{{relationText}}">{{relationText}}</view>
+  </view>
+
+  <view class="section" wx:if="{{rewards.length}}">
+    <view class="list">
+      <view class="card" wx:for="{{rewards}}" wx:key="id">
+        <view class="list-title">{{item.amountText}} <text class="badge">{{item.status}}</text></view>
+        <view class="list-meta">订单金额 {{item.orderAmountText}} · {{item.createdText}}</view>
+      </view>
+    </view>
+  </view>
+</view>

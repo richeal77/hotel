@@ -6,6 +6,8 @@ downloads/
 
 # Node
 node_modules/
+dist/
+miniprogram_npm/
 
 # Logs and local env
 *.log
@@ -16,3 +18,9 @@ node_modules/
 # Go
 bin/
 coverage.out
+.cache/
+apps/api/data/
+
+# Local IDE settings and packaged binaries
+project.private.config.json
+release/

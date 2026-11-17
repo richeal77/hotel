@@ -1,0 +1,404 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --text: #1f2937;
+  --muted: #667085;
+  --line: #d9dee7;
+  --primary: #176b5d;
+  --primary-dark: #0f4f45;
+  --accent: #2f6fed;
+  --danger: #c83737;
+  --warning: #9b5b00;
+  --success-bg: #e9f7ef;
+  --error-bg: #fdecec;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 0 11px;
+}
+
+label span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+td small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+  word-break: break-all;
+}
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(440px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 18px 48px rgba(31, 41, 55, 0.12);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 20px;
+  font-size: 28px;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 22px;
+}
+
+h3 {
+  margin-bottom: 14px;
+  font-size: 17px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary:hover {
+  background: var(--primary-dark);
+}
+
+.secondary {
+  background: #eef3ff;
+  color: var(--accent);
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.compact {
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.topbar,
+.config-row,
+.tabs,
+.content {
+  width: min(1180px, calc(100% - 32px));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 22px 0 12px;
+}
+
+.topbar h1 {
+  margin-bottom: 0;
+}
+
+.staff-chip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 16px 0;
+  overflow-x: auto;
+}
+
+.tabs button {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.tabs button.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: #fff;
+}
+
+.content {
+  padding-bottom: 36px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.inline-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.inline-form input,
+.inline-form select {
+  min-width: 180px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.metric,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.metric {
+  padding: 16px;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.metric strong {
+  font-size: 26px;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.panel {
+  padding: 16px;
+}
+
+.table-panel {
+  overflow-x: auto;
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.empty.slim {
+  min-height: 88px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: #eef0f4;
+  color: #344054;
+  font-size: 13px;
+}
+
+.badge.pending_confirm {
+  background: #fff3d8;
+  color: var(--warning);
+}
+
+.badge.confirmed,
+.badge.checked_in {
+  background: #eaf1ff;
+  color: var(--accent);
+}
+
+.badge.checked_out {
+  background: var(--success-bg);
+  color: var(--primary);
+}
+
+.badge.cancelled {
+  background: #f0f1f3;
+  color: var(--muted);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 11px 14px;
+}
+
+.detail-list span,
+.muted {
+  color: var(--muted);
+}
+
+.detail-list strong {
+  word-break: break-word;
+}
+
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: min(420px, calc(100% - 36px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px 15px;
+  box-shadow: 0 12px 34px rgba(31, 41, 55, 0.18);
+}
+
+.toast.success {
+  background: var(--success-bg);
+  color: var(--primary-dark);
+}
+
+.toast.error {
+  background: var(--error-bg);
+  color: var(--danger);
+}
+
+@media (max-width: 860px) {
+  .topbar,
+  .section-head,
+  .inline-form,
+  .staff-chip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .config-row,
+  .metrics-grid,
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form input,
+  .inline-form select {
+    min-width: 0;
+  }
+
+  .metric strong {
+    font-size: 22px;
+  }
+}

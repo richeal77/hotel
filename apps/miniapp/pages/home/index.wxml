@@ -1,0 +1,63 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">验证码 666666 · {{apiModeText}}</text>
+  </view>
+
+  <view class="section panel">
+    <view class="hero-title">{{hotelName}}</view>
+    <view class="hero-line">{{hotelAddress}}</view>
+    <view class="hero-line">今日会员价 {{priceText}} · {{hotelPhone}}</view>
+    <view class="hero-line">{{hotelTagsText}}</view>
+    <view class="btn-row">
+      <button class="primary-btn" bindtap="goPage" data-url="/pages/join/index">入会/绑定手机号</button>
+      <button class="secondary-btn" bindtap="goPage" data-url="/pages/member-code/index">会员码</button>
+    </view>
+  </view>
+
+  <view class="section stat-grid">
+    <view class="stat">
+      <text class="stat-value">{{walletText}}</text>
+      <text class="stat-label">返住金</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{couponCount}}</text>
+      <text class="stat-label">可用券</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{bookingCount}}</text>
+      <text class="stat-label">订单</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{rewardText}}</text>
+      <text class="stat-label">推荐奖励</text>
+    </view>
+  </view>
+
+  <view class="section action-grid">
+    <view class="action-item" bindtap="goPage" data-url="/pages/booking/index">
+      <text class="action-title">订房</text>
+      <text class="action-meta">提交到店入住意向</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/orders/index">
+      <text class="action-title">我的订单</text>
+      <text class="action-meta">查看待确认订单</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/coupons/index">
+      <text class="action-title">优惠券</text>
+      <text class="action-meta">入会礼和可用权益</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/wallet/index">
+      <text class="action-title">返住金</text>
+      <text class="action-meta">离店后到账记录</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/referral/index">
+      <text class="action-title">推荐有礼</text>
+      <text class="action-meta">分享推荐码</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/profile/index">
+      <text class="action-title">我的</text>
+      <text class="action-meta">会员资料和来源</text>
+    </view>
+  </view>
+</view>

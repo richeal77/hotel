@@ -1,0 +1,3 @@
+.hero-line:empty {
+  display: none;
+}

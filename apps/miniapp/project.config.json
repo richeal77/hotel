@@ -1,0 +1,60 @@
+{
+  "appid": "wxe5d704e735725aba",
+  "projectname": "gaobeidian-shangkeyou-miniapp-demo",
+  "miniprogramRoot": "./",
+  "compileType": "miniprogram",
+  "libVersion": "latest",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false,
+    "newFeature": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "condition": {
+    "miniprogram": {
+      "current": -1,
+      "list": [
+        {
+          "id": 1,
+          "name": "前台扫码入会",
+          "pathName": "pages/home/index",
+          "query": "scene=frontdesk_qr"
+        },
+        {
+          "id": 2,
+          "name": "推荐人扫码",
+          "pathName": "pages/home/index",
+          "query": "scene=referral_qr&referrer=mbr_001"
+        }
+      ]
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
+}

@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">{{apiModeText}} · 前台确认</text>
+  </view>
+
+  <view class="section" wx:if="{{orders.length}}">
+    <view class="list">
+      <view class="card" wx:for="{{orders}}" wx:key="id">
+        <view class="list-title">{{item.room_type}} <text class="badge">{{item.statusText}}</text></view>
+        <view class="list-meta">{{item.checkin_date}} 至 {{item.checkout_date}} · {{item.arrival_time}}</view>
+        <view class="list-meta">{{item.contact_name}} · {{item.phone}}</view>
+        <view class="list-meta">预估金额 {{item.amountText}} · {{item.paid_status}}</view>
+        <view class="list-meta" wx:if="{{item.remark}}">{{item.remark}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section panel empty" wx:else>
+    <view>暂无订单</view>
+    <button class="primary-btn empty-btn" bindtap="goBooking">去订房</button>
+  </view>
+</view>

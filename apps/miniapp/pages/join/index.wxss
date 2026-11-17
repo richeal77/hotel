@@ -1,0 +1,3 @@
+.radio-row switch {
+  margin-right: 18rpx;
+}

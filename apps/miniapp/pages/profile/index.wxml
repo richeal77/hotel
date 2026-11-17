@@ -1,0 +1,78 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">{{apiModeText}}</text>
+  </view>
+
+  <view class="section panel">
+    <view class="panel-title">{{member.nickname || "演示住客"}}</view>
+    <view class="list-meta">会员码：{{memberCode}}</view>
+    <view class="list-meta">手机号：{{member.phone || "未绑定"}}</view>
+    <view class="list-meta">状态：{{member.status || "active"}}</view>
+    <view class="btn-row">
+      <button class="secondary-btn" bindtap="refreshLogin">重新模拟登录</button>
+      <button class="primary-btn" bindtap="goPage" data-url="/pages/join/index">入会/绑定</button>
+    </view>
+  </view>
+
+  <view class="section stat-grid">
+    <view class="stat">
+      <text class="stat-value">{{walletText}}</text>
+      <text class="stat-label">返住金</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{couponCount}}</text>
+      <text class="stat-label">优惠券</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{bookingCount}}</text>
+      <text class="stat-label">订单</text>
+    </view>
+    <view class="stat">
+      <text class="stat-value">{{member.stay_count || 0}}</text>
+      <text class="stat-label">入住次数</text>
+    </view>
+  </view>
+
+  <view class="section panel">
+    <view class="panel-title">来源参数</view>
+    <view class="list-meta">source: {{context.source}}</view>
+    <view class="list-meta">scene: {{context.scene}}</view>
+    <view class="list-meta">referrer: {{context.referrerMemberId || "无"}}</view>
+  </view>
+
+  <view class="section panel">
+    <view class="panel-title">验收接口设置</view>
+    <view class="form-row">
+      <text class="label">API base URL</text>
+      <input class="input" value="{{apiBaseInput}}" data-field="apiBaseInput" bindinput="onInput" />
+      <view class="list-meta">真机示例：http://电脑局域网IP:8080/api/v1</view>
+    </view>
+    <view class="radio-row">
+      <switch checked="{{localDemoEnabled}}" bindchange="toggleLocalDemo" color="#0f766e" />
+      <text>本地演示数据</text>
+    </view>
+    <view class="list-meta">当前状态：{{apiModeText}}</view>
+    <view class="list-meta">当前地址：{{apiBaseUrl}}</view>
+    <button class="primary-btn save-btn" bindtap="saveApiBaseUrl">保存 API 地址</button>
+  </view>
+
+  <view class="section action-grid">
+    <view class="action-item" bindtap="goPage" data-url="/pages/member-code/index">
+      <text class="action-title">会员码</text>
+      <text class="action-meta">到店出示</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/coupons/index">
+      <text class="action-title">优惠券</text>
+      <text class="action-meta">查看权益</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/wallet/index">
+      <text class="action-title">返住金</text>
+      <text class="action-meta">余额明细</text>
+    </view>
+    <view class="action-item" bindtap="goPage" data-url="/pages/referral/index">
+      <text class="action-title">推荐有礼</text>
+      <text class="action-meta">分享给朋友</text>
+    </view>
+  </view>
+</view>

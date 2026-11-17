@@ -1,0 +1,14 @@
+.wallet-balance {
+  margin: 12rpx 0 26rpx;
+  color: #0f766e;
+  font-size: 58rpx;
+  font-weight: 800;
+}
+
+.wallet-stat {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.empty-btn {
+  margin-top: 24rpx;
+}

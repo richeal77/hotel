@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Gaobeidian Shangkeyou Miniapp Demo API
-  version: 0.1.0
-  description: Frozen phase 1 API contract for the local demo.
+  title: Gaobeidian Shangkeyou Miniapp API
+  version: 0.2.0
+  description: Phase 1 implemented demo contract plus planned phase 2 authentication changes. Operations marked planned are not yet implemented.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local demo on development computer
@@ -24,6 +24,8 @@ paths:
     post:
       tags: [Auth]
       summary: Mock miniapp login
+      description: Available only in local-demo. Must be disabled in integration and production.
+      x-environments: [local-demo]
       security: []
       requestBody:
         required: true
@@ -50,20 +52,23 @@ paths:
                             example: mock_member_token
                           member:
                             $ref: "#/components/schemas/MemberAuthProfile"
-  /auth/send-code:
+  /auth/wx-login:
     post:
       tags: [Auth]
-      summary: Send mock SMS code
+      summary: Log in with a WeChat login code
+      description: Planned for phase 2. Exchange the short-lived wx.login code on the server; never send an app secret to the client.
+      x-environments: [integration, production]
+      x-implementation-status: planned
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SendCodeRequest"
+              $ref: "#/components/schemas/WxLoginRequest"
       responses:
         "200":
-          description: Mock SMS code
+          description: Member session
           content:
             application/json:
               schema:
@@ -73,18 +78,45 @@ paths:
                     properties:
                       data:
                         type: object
-                        required: [mock_code, expire_seconds]
+                        required: [member_token, member]
                         properties:
-                          mock_code:
+                          member_token:
                             type: string
-                            enum: ["666666"]
-                          expire_seconds:
-                            type: integer
-                            example: 300
+                          member:
+                            $ref: "#/components/schemas/MemberAuthProfile"
+  /auth/send-code:
+    post:
+      tags: [Auth]
+      summary: Send phone verification code
+      description: Local-demo returns mock_code; integration and production send a real SMS and omit mock_code.
+      x-environments: [local-demo, integration, production]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendCodeRequest"
+      responses:
+        "200":
+          description: Verification code dispatch result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - $ref: "#/components/schemas/DemoSendCodeData"
+                          - $ref: "#/components/schemas/LiveSendCodeData"
   /auth/bind-phone:
     post:
       tags: [Auth]
-      summary: Bind member phone with mock code
+      summary: Bind member phone with an SMS code
+      description: Local-demo accepts code 666666; integration and production verify a server-issued SMS code. No code is returned by the live send-code response.
+      x-environments: [local-demo, integration, production]
       security:
         - memberBearerAuth: []
       requestBody:
@@ -93,6 +125,37 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/BindPhoneRequest"
+      responses:
+        "200":
+          description: Bound member
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [member]
+                        properties:
+                          member:
+                            $ref: "#/components/schemas/MemberAuthProfile"
+  /auth/wx-bind-phone:
+    post:
+      tags: [Auth]
+      summary: Bind member phone using WeChat phone authorization
+      description: Planned for phase 2. The server exchanges the short-lived phone code obtained from wx.getPhoneNumber.
+      x-environments: [integration, production]
+      x-implementation-status: planned
+      security:
+        - memberBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WxBindPhoneRequest"
       responses:
         "200":
           description: Bound member
@@ -335,6 +398,7 @@ paths:
     post:
       tags: [Admin]
       summary: Staff login
+      description: Local-demo uses the documented demo password. Integration and production use separately provisioned credentials and server-side password verification.
       security: []
       requestBody:
         required: true
@@ -703,6 +767,8 @@ paths:
     get:
       tags: [Demo]
       summary: Get demo state
+      description: Available only in local-demo.
+      x-environments: [local-demo]
       security:
         - staffBearerAuth: []
       responses:
@@ -721,6 +787,8 @@ paths:
     post:
       tags: [Demo]
       summary: Reset demo data
+      description: Available only in local-demo.
+      x-environments: [local-demo]
       security:
         - staffBearerAuth: []
       requestBody:
@@ -878,6 +946,38 @@ components:
         referrer_member_id:
           type: string
           example: mbr_001
+    WxLoginRequest:
+      type: object
+      required: [wx_login_code]
+      properties:
+        wx_login_code:
+          type: string
+          minLength: 1
+          description: Short-lived code returned by wx.login.
+        scene:
+          type: string
+          example: frontdesk_qr
+        referrer_member_id:
+          type: string
+          example: mbr_001
+    DemoSendCodeData:
+      type: object
+      required: [mock_code, expire_seconds]
+      properties:
+        mock_code:
+          type: string
+          enum: ["666666"]
+        expire_seconds:
+          type: integer
+          example: 300
+    LiveSendCodeData:
+      type: object
+      required: [expire_seconds]
+      additionalProperties: false
+      properties:
+        expire_seconds:
+          type: integer
+          example: 300
     SendCodeRequest:
       type: object
       required: [phone, purpose]
@@ -897,7 +997,16 @@ components:
           example: "13800138001"
         code:
           type: string
-          enum: ["666666"]
+          description: Local-demo uses 666666; live environments accept only the issued SMS code.
+          example: "666666"
+    WxBindPhoneRequest:
+      type: object
+      required: [phone_code]
+      properties:
+        phone_code:
+          type: string
+          minLength: 1
+          description: Short-lived code returned by wx.getPhoneNumber.
     JoinMemberRequest:
       type: object
       required: [nickname, phone, source, scene, accepted_privacy, accepted_member_rule, gift_choice]
@@ -934,7 +1043,8 @@ components:
           example: boss
         password:
           type: string
-          enum: ["666666"]
+          format: password
+          description: Demo password is 666666; live credentials are provisioned separately.
     MemberAuthProfile:
       type: object
       required: [id, openid, phone, is_phone_bound]

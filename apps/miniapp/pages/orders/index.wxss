@@ -1,0 +1,7 @@
+.badge {
+  margin-left: 12rpx;
+}
+
+.empty-btn {
+  margin-top: 24rpx;
+}

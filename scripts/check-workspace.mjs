@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -63,15 +62,6 @@ for (const key of requiredEnvKeys) {
   if (!new RegExp(`^${key}=`, "m").test(envExample)) {
     fail(`.env.example missing ${key}`);
   }
-}
-
-const contractDiff = spawnSync("git", ["diff", "--quiet", "--", "docs/contracts/openapi.yaml"], {
-  cwd: root,
-  stdio: "ignore"
-});
-
-if (contractDiff.status !== 0) {
-  fail("docs/contracts/openapi.yaml has uncommitted changes");
 }
 
 console.log("workspace foundation check passed");

@@ -1,0 +1,33 @@
+.member-card {
+  text-align: center;
+}
+
+.member-code {
+  margin: 16rpx 0 24rpx;
+  color: #0f172a;
+  font-size: 46rpx;
+  font-weight: 800;
+}
+
+.qr-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 360rpx;
+  height: 360rpx;
+  margin: 0 auto 24rpx;
+  border: 12rpx solid #111827;
+  background: #ffffff;
+}
+
+.qr-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 250rpx;
+  height: 250rpx;
+  border: 4rpx solid #111827;
+  color: #111827;
+  font-size: 24rpx;
+  word-break: break-all;
+}

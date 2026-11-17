@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="demo-ribbon">
+    <text>演示模式</text>
+    <text class="api-mode">{{apiModeText}} · 离店后发放</text>
+  </view>
+
+  <view class="section panel">
+    <view class="panel-title">返住金余额</view>
+    <view class="wallet-balance">{{balanceText}}</view>
+    <view class="stat-grid wallet-stat">
+      <view class="stat">
+        <text class="stat-value">{{grantedText}}</text>
+        <text class="stat-label">累计发放</text>
+      </view>
+      <view class="stat">
+        <text class="stat-value">{{usedText}}</text>
+        <text class="stat-label">累计使用</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{ledgers.length}}">
+    <view class="list">
+      <view class="card" wx:for="{{ledgers}}" wx:key="id">
+        <view class="list-title">{{item.typeText}} <text class="badge">{{item.statusText}}</text></view>
+        <view class="list-meta">{{item.amountText}} · {{item.createdText}}</view>
+        <view class="list-meta" wx:if="{{item.expireText}}">有效期至 {{item.expireText}}</view>
+        <view class="list-meta">{{item.reason}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section panel empty" wx:else>
+    <view>暂无返住金记录</view>
+    <button class="primary-btn empty-btn" bindtap="goOrders">查看订单</button>
+  </view>
+</view>
