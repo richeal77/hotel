@@ -151,6 +151,16 @@ type MockLoginRequest struct {
 	ReferrerMemberID string `json:"referrer_member_id"`
 }
 
+type WxLoginRequest struct {
+	WxLoginCode      string `json:"wx_login_code"`
+	Scene            string `json:"scene"`
+	ReferrerMemberID string `json:"referrer_member_id"`
+}
+
+type WxBindPhoneRequest struct {
+	PhoneCode string `json:"phone_code"`
+}
+
 type SendCodeRequest struct {
 	Phone   string `json:"phone"`
 	Purpose string `json:"purpose"`

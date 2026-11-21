@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Gaobeidian Shangkeyou Miniapp API
-  version: 0.2.0
-  description: Phase 1 implemented demo contract plus planned phase 2 authentication changes. Operations marked planned are not yet implemented.
+  version: 0.3.0
+  description: Local demo and MySQL-backed integration authentication contract. SMS delivery outside local-demo remains planned.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local demo on development computer
@@ -56,9 +56,8 @@ paths:
     post:
       tags: [Auth]
       summary: Log in with a WeChat login code
-      description: Planned for phase 2. Exchange the short-lived wx.login code on the server; never send an app secret to the client.
+      description: Exchange the short-lived wx.login code on the server; never send an app secret to the client.
       x-environments: [integration, production]
-      x-implementation-status: planned
       security: []
       requestBody:
         required: true
@@ -88,8 +87,10 @@ paths:
     post:
       tags: [Auth]
       summary: Send phone verification code
-      description: Local-demo returns mock_code; integration and production send a real SMS and omit mock_code.
-      x-environments: [local-demo, integration, production]
+      description: Local-demo returns mock_code. Live SMS delivery is reserved in this contract but unavailable until a provider is integrated.
+      x-environments: [local-demo]
+      x-planned-environments: [integration, production]
+      x-implementation-status: live-sms-planned
       security: []
       requestBody:
         required: true
@@ -115,8 +116,10 @@ paths:
     post:
       tags: [Auth]
       summary: Bind member phone with an SMS code
-      description: Local-demo accepts code 666666; integration and production verify a server-issued SMS code. No code is returned by the live send-code response.
-      x-environments: [local-demo, integration, production]
+      description: Local-demo accepts code 666666. Live SMS verification is unavailable until a provider is integrated.
+      x-environments: [local-demo]
+      x-planned-environments: [integration, production]
+      x-implementation-status: live-sms-planned
       security:
         - memberBearerAuth: []
       requestBody:
@@ -145,9 +148,8 @@ paths:
     post:
       tags: [Auth]
       summary: Bind member phone using WeChat phone authorization
-      description: Planned for phase 2. The server exchanges the short-lived phone code obtained from wx.getPhoneNumber.
+      description: The server exchanges the short-lived phone code obtained from wx.getPhoneNumber.
       x-environments: [integration, production]
-      x-implementation-status: planned
       security:
         - memberBearerAuth: []
       requestBody:
@@ -172,6 +174,20 @@ paths:
                         properties:
                           member:
                             $ref: "#/components/schemas/MemberAuthProfile"
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current member session
+      x-environments: [integration, production]
+      security:
+        - memberBearerAuth: []
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
   /members/join:
     post:
       tags: [Miniapp]
@@ -422,9 +438,22 @@ paths:
                         properties:
                           access_token:
                             type: string
-                            example: mock_staff_token
                           staff:
                             $ref: "#/components/schemas/StaffUser"
+  /admin/auth/logout:
+    post:
+      tags: [Admin]
+      summary: Revoke the current staff session
+      x-environments: [integration, production]
+      security:
+        - staffBearerAuth: []
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
   /admin/dashboard/summary:
     get:
       tags: [Admin]
@@ -819,11 +848,11 @@ components:
     memberBearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      description: Opaque, revocable session token in integration and production; mock token in local-demo.
     staffBearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      description: Opaque, revocable session token in integration and production; mock token in local-demo.
   parameters:
     PageQuery:
       name: page
@@ -1074,6 +1103,7 @@ components:
         phone:
           type: string
           example: "13800138001"
+          description: Full value for the member; masked in staff responses in integration and production.
         nickname:
           type: string
           example: Zhang San

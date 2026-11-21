@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 券由前台核销</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">券由前台核销</text>
   </view>
 
   <view class="section filter-row">

@@ -1,6 +1,6 @@
 # Gaobeidian Shangkeyou Miniapp Demo
 
-Phase 1 is a local demo for the hotel membership miniapp. All external services are mocked. Phase 2 API changes are specified in `docs/contracts/phase-2-changes.md` but are not implemented yet.
+Phase 1 remains a local JSON demo. Phase 2 MySQL and WeChat authentication setup is documented in `docs/architecture/mysql-phase2.md`.
 
 ## Repository Root
 
@@ -44,7 +44,7 @@ pnpm install
 pnpm run check
 ```
 
-The phase 1 API, admin web and miniapp code is present. The phase 2 operations in OpenAPI are specifications for future implementation.
+The API, admin web and miniapp code is present. Without `APP_ENV`, the API uses local JSON and mock routes. With `APP_ENV=integration` or `production`, it uses MySQL and real WeChat authentication. See `docs/architecture/mysql-phase2.md` for migrations, staff provisioning, and environment settings.
 
 ## Development Commands
 

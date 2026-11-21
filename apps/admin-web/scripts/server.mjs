@@ -3,10 +3,13 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { adminConfig, configScript, proxyTarget } from "./config.mjs";
 
 const rootDir = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const publicDir = join(rootDir, "src");
 const initialPort = Number(process.env.ADMIN_WEB_PORT || process.env.PORT || 5173);
+const config = adminConfig(process.env, { dev: true });
+const apiOrigin = new URL(process.env.ADMIN_API_ORIGIN || "http://localhost:8080").origin;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -44,31 +47,7 @@ async function readRequestBody(req) {
   return Buffer.concat(chunks);
 }
 
-async function proxyRequest(req, res, requestUrl) {
-  const target = requestUrl.searchParams.get("url");
-  if (!target) {
-    send(res, 400, JSON.stringify({ code: 40000, message: "缺少代理目标", data: null }), {
-      "Content-Type": "application/json; charset=utf-8"
-    });
-    return;
-  }
-
-  let targetUrl;
-  try {
-    targetUrl = new URL(target);
-  } catch {
-    send(res, 400, JSON.stringify({ code: 40000, message: "API 地址格式错误", data: null }), {
-      "Content-Type": "application/json; charset=utf-8"
-    });
-    return;
-  }
-
-  if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
-    send(res, 400, JSON.stringify({ code: 40000, message: "仅支持 HTTP API 地址", data: null }), {
-      "Content-Type": "application/json; charset=utf-8"
-    });
-    return;
-  }
+async function proxyRequest(req, res, target) {
 
   const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readRequestBody(req);
   const headers = {};
@@ -79,7 +58,7 @@ async function proxyRequest(req, res, requestUrl) {
   }
 
   try {
-    const upstream = await fetch(targetUrl, {
+    const upstream = await fetch(target, {
       method: req.method,
       headers,
       body
@@ -129,9 +108,17 @@ async function serveStatic(req, res, requestUrl) {
 export function createAdminServer() {
   return createServer(async (req, res) => {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
-
-    if (requestUrl.pathname === "/__admin_proxy") {
-      await proxyRequest(req, res, requestUrl);
+    if (requestUrl.pathname === "/config.js") {
+      send(res, 200, configScript(config), { "Content-Type": "text/javascript; charset=utf-8" });
+      return;
+    }
+    if (requestUrl.pathname.startsWith("/__admin_proxy")) {
+      const target = proxyTarget(requestUrl.pathname, requestUrl.search, apiOrigin, config.appEnv);
+      if (!target) {
+        send(res, 404, "Not found");
+        return;
+      }
+      await proxyRequest(req, res, target);
       return;
     }
 
@@ -167,5 +154,5 @@ async function listen(server, port, attemptsLeft = 10) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { port } = await listen(createAdminServer(), initialPort);
   console.log(`admin-web dev server: http://localhost:${port}`);
-  console.log("API requests are proxied through /__admin_proxy to the configured API base URL.");
+  console.log(config.proxyEnabled ? `API proxy target: ${apiOrigin}/api/v1/` : "API proxy disabled.");
 }

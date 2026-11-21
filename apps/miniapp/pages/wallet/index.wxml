@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 离店后发放</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">离店后发放</text>
   </view>
 
   <view class="section panel">

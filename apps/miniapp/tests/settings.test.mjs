@@ -44,4 +44,17 @@ test("local demo mode is disabled by default and must be enabled explicitly", ()
 
   settings.setApiMode("local-demo");
   assert.equal(settings.getApiMode(), "local-demo");
+
+  assert.throws(() => settings.setApiMode("live"), /HTTPS API 域名/);
+});
+
+test("live API domain is stored separately and cannot use HTTP or localhost", () => {
+  const settings = createRuntimeSettings({ storage: createMemoryStorage() });
+  assert.throws(() => settings.setLiveApiBaseUrl("http://api.example.com/api/v1"), /HTTPS/);
+  assert.throws(() => settings.setLiveApiBaseUrl("https://localhost:8080/api/v1"), /域名/);
+  settings.setLiveApiBaseUrl("https://api.example.com/api/v1/");
+  settings.setApiMode("live");
+  assert.equal(settings.getApiBaseUrl(), "https://api.example.com/api/v1");
+  settings.setApiMode("http");
+  assert.equal(settings.getApiBaseUrl(), "http://localhost:8080/api/v1");
 });

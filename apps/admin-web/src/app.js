@@ -1,10 +1,23 @@
 export const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
+const appConfig = typeof window === "undefined"
+  ? { appEnv: "local-demo", apiBaseUrl: DEFAULT_API_BASE_URL, proxyEnabled: false }
+  : (window.ADMIN_CONFIG || { appEnv: "production", apiBaseUrl: "/api/v1", proxyEnabled: false });
 
 const storageKeys = {
-  apiBaseUrl: "admin_api_base_url",
   staffToken: "admin_staff_token",
   staffUser: "admin_staff_user"
 };
+
+const roleTabs = {
+  boss: ["dashboard", "orders", "redemption", "audit", "demo"],
+  manager: ["dashboard", "orders", "redemption"],
+  frontdesk: ["orders", "redemption"],
+  finance: ["audit"]
+};
+
+export function allowedTabs(role, appEnv) {
+  return (roleTabs[role] || []).filter((tab) => tab !== "demo" || appEnv === "local-demo");
+}
 
 const statusText = {
   pending_confirm: "待前台确认",
@@ -32,7 +45,7 @@ const bookingStatusOptions = [
 
 const state = {
   activeTab: "dashboard",
-  apiBaseUrl: DEFAULT_API_BASE_URL,
+  apiBaseUrl: appConfig.apiBaseUrl,
   token: "",
   staff: null,
   dashboardDate: today(),
@@ -44,6 +57,8 @@ const state = {
   selectedCouponId: "",
   selectedOrderId: "",
   demoState: null,
+  auditPage: 1,
+  auditData: null,
   toast: null,
   loading: false
 };
@@ -92,43 +107,43 @@ function escapeHtml(value) {
 }
 
 function loadState() {
-  state.apiBaseUrl = sanitizeApiBaseUrl(localStorage.getItem(storageKeys.apiBaseUrl) || DEFAULT_API_BASE_URL);
-  state.token = localStorage.getItem(storageKeys.staffToken) || "";
+  state.token = sessionStorage.getItem(storageKeys.staffToken) || "";
+  localStorage.removeItem(storageKeys.staffToken);
   try {
-    state.staff = JSON.parse(localStorage.getItem(storageKeys.staffUser) || "null");
+    state.staff = JSON.parse(sessionStorage.getItem(storageKeys.staffUser) || "null");
   } catch {
     state.staff = null;
   }
-}
-
-function saveApiBaseUrl(value) {
-  state.apiBaseUrl = sanitizeApiBaseUrl(value);
-  localStorage.setItem(storageKeys.apiBaseUrl, state.apiBaseUrl);
+  localStorage.removeItem("admin_api_base_url");
+  localStorage.removeItem(storageKeys.staffUser);
+  if (!state.staff || !allowedTabs(state.staff.role, appConfig.appEnv).length) {
+    clearStaffSession();
+  } else {
+    state.activeTab = allowedTabs(state.staff.role, appConfig.appEnv)[0];
+  }
 }
 
 function saveStaffSession(token, staff) {
   state.token = token;
   state.staff = staff;
-  localStorage.setItem(storageKeys.staffToken, token);
-  localStorage.setItem(storageKeys.staffUser, JSON.stringify(staff));
+  sessionStorage.setItem(storageKeys.staffToken, token);
+  sessionStorage.setItem(storageKeys.staffUser, JSON.stringify(staff));
 }
 
 function clearStaffSession() {
   state.token = "";
   state.staff = null;
+  sessionStorage.removeItem(storageKeys.staffToken);
+  sessionStorage.removeItem(storageKeys.staffUser);
   localStorage.removeItem(storageKeys.staffToken);
   localStorage.removeItem(storageKeys.staffUser);
 }
 
-function proxyUrl(fullUrl) {
-  if (typeof window === "undefined" || window.location.protocol === "file:") {
-    return fullUrl;
-  }
-  return `/__admin_proxy?url=${encodeURIComponent(fullUrl)}`;
+function apiUrl(path) {
+  return appConfig.proxyEnabled ? `/__admin_proxy/api/v1${path}` : `${state.apiBaseUrl}${path}`;
 }
 
 async function api(path, options = {}) {
-  const fullUrl = `${sanitizeApiBaseUrl(state.apiBaseUrl)}${path}`;
   const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -137,11 +152,21 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
-  const response = await fetch(proxyUrl(fullUrl), {
+  const response = await fetch(apiUrl(path), {
     method: options.method || "GET",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   });
+
+  if (response.status === 401 && state.token) {
+    clearStaffSession();
+    state.dashboard = null;
+    state.bookings = [];
+    state.redemption = null;
+    state.auditData = null;
+    state.demoState = null;
+    throw new Error("登录已失效，请重新登录");
+  }
 
   let payload = null;
   try {
@@ -187,7 +212,6 @@ async function runAction(action, successMessage) {
 async function login(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
-  saveApiBaseUrl(form.get("apiBaseUrl"));
   const data = await runAction(
     () =>
       api("/admin/auth/login", {
@@ -202,8 +226,15 @@ async function login(event) {
   if (!data) {
     return;
   }
+  const tabs = allowedTabs(data.staff?.role, appConfig.appEnv);
+  if (!tabs.length) {
+    setToast("当前账号没有可用的后台页面", "error");
+    return;
+  }
   saveStaffSession(data.access_token, data.staff);
-  await loadDashboard();
+  state.activeTab = tabs[0];
+  render();
+  await loadActiveTab();
 }
 
 async function loadDashboard() {
@@ -230,6 +261,9 @@ async function loadBookings() {
 async function updateOrderStatus(order) {
   const next = nextBookingStatus(order.status);
   if (!next) {
+    return;
+  }
+  if (!window.confirm(`确认对订单 ${order.id} 执行“${next.label}”？`)) {
     return;
   }
   const amount = Number(order.actual_amount_cent || order.estimated_amount_cent || 0);
@@ -278,6 +312,10 @@ async function redeemCoupon(event) {
     setToast("请选择券和订单", "error");
     return;
   }
+  const coupon = state.redemption?.coupons?.find((item) => item.id === couponId);
+  if (!window.confirm(`确认将“${coupon?.name || couponId}”用于订单 ${orderId}？核销后不可撤销。`)) {
+    return;
+  }
   const data = await runAction(
     () =>
       api(`/admin/coupons/${encodeURIComponent(couponId)}/redeem`, {
@@ -308,12 +346,31 @@ async function loadDemoState() {
   }
 }
 
+async function loadAuditLogs(page = state.auditPage) {
+  const data = await runAction(() => api(`/admin/audit-logs?page=${page}&page_size=20`));
+  if (data) {
+    state.auditPage = data.page;
+    state.auditData = data;
+    render();
+  }
+}
+
+async function loadActiveTab() {
+  if (state.activeTab === "dashboard") await loadDashboard();
+  if (state.activeTab === "orders") await loadBookings();
+  if (state.activeTab === "audit") await loadAuditLogs();
+  if (state.activeTab === "demo") await loadDemoState();
+}
+
 async function resetDemo(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const confirmText = String(form.get("confirmText") || "").trim();
   if (confirmText !== "RESET") {
     setToast("请输入 RESET 后再重置", "error");
+    return;
+  }
+  if (!window.confirm("确认重置所有演示数据？此操作不可撤销。")) {
     return;
   }
   const data = await runAction(
@@ -347,21 +404,17 @@ function renderLogin() {
     <main class="login-shell">
       <section class="login-panel">
         <div>
-          <p class="eyebrow">P0 管理后台</p>
+          <p class="eyebrow">管理后台</p>
           <h1>高碑店尚客优</h1>
         </div>
         <form id="loginForm" class="form-grid">
           <label>
-            <span>API Base URL</span>
-            <input name="apiBaseUrl" value="${escapeHtml(state.apiBaseUrl)}" autocomplete="off" />
-          </label>
-          <label>
             <span>账号</span>
-            <input name="username" value="boss" autocomplete="username" />
+            <input name="username" autocomplete="username" required />
           </label>
           <label>
             <span>密码</span>
-            <input name="password" type="password" value="666666" autocomplete="current-password" />
+            <input name="password" type="password" autocomplete="current-password" required />
           </label>
           <button class="primary" type="submit" ${state.loading ? "disabled" : ""}>登录</button>
         </form>
@@ -375,8 +428,9 @@ function renderShell() {
     ["dashboard", "老板看板"],
     ["orders", "订单管理"],
     ["redemption", "券核销"],
+    ["audit", "审计日志"],
     ["demo", "Demo 控制台"]
-  ];
+  ].filter(([key]) => allowedTabs(state.staff?.role, appConfig.appEnv).includes(key));
   return `
     <header class="topbar">
       <div>
@@ -384,17 +438,10 @@ function renderShell() {
         <h1>管理后台</h1>
       </div>
       <div class="staff-chip">
-        <span>${escapeHtml(state.staff?.name || "Boss")}</span>
+        <span>${escapeHtml(state.staff?.name || "员工")} · ${escapeHtml(state.staff?.role || "")}</span>
         <button id="logoutBtn" class="ghost" type="button">退出</button>
       </div>
     </header>
-    <section class="config-row">
-      <label>
-        <span>API Base URL</span>
-        <input id="apiBaseInput" value="${escapeHtml(state.apiBaseUrl)}" autocomplete="off" />
-      </label>
-      <button id="saveApiBaseBtn" class="secondary" type="button">保存</button>
-    </section>
     <nav class="tabs">
       ${tabs
         .map(
@@ -419,6 +466,9 @@ function renderActiveTab() {
   }
   if (state.activeTab === "demo") {
     return renderDemo();
+  }
+  if (state.activeTab === "audit") {
+    return renderAudit();
   }
   return renderDashboard();
 }
@@ -691,6 +741,38 @@ function renderDemo() {
   `;
 }
 
+function renderAudit() {
+  const result = state.auditData;
+  const items = result?.items || [];
+  const lastPage = result ? Math.max(1, Math.ceil(result.total / result.page_size)) : 1;
+  return `
+    <section class="section-head">
+      <h2>审计日志</h2>
+      <button id="refreshAuditBtn" class="secondary" type="button">刷新</button>
+    </section>
+    <section class="panel table-panel">
+      ${items.length ? `
+        <table>
+          <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>摘要</th><th>详情</th></tr></thead>
+          <tbody>${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.created_at)}</td>
+              <td>${escapeHtml(item.operator_name || item.operator_staff_id)}</td>
+              <td>${escapeHtml(item.action)}</td>
+              <td>${escapeHtml(item.target_type)}<small>${escapeHtml(item.target_id)}</small></td>
+              <td>${escapeHtml(item.summary)}</td>
+              <td>${item.before || item.after ? `<details><summary>查看</summary><pre>${escapeHtml(JSON.stringify({ before: item.before || null, after: item.after || null }, null, 2))}</pre></details>` : "-"}</td>
+            </tr>`).join("")}</tbody>
+        </table>` : `<div class="empty">暂无审计记录</div>`}
+    </section>
+    <div class="pagination">
+      <button class="secondary" data-audit-page="${state.auditPage - 1}" ${state.auditPage <= 1 ? "disabled" : ""}>上一页</button>
+      <span>第 ${state.auditPage} / ${lastPage} 页 · 共 ${result?.total || 0} 条</span>
+      <button class="secondary" data-audit-page="${state.auditPage + 1}" ${state.auditPage >= lastPage ? "disabled" : ""}>下一页</button>
+    </div>
+  `;
+}
+
 function render() {
   const app = document.querySelector("#app");
   app.innerHTML = `
@@ -702,28 +784,25 @@ function render() {
 
 function bindEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
-  document.querySelector("#logoutBtn")?.addEventListener("click", () => {
+  document.querySelector("#logoutBtn")?.addEventListener("click", async () => {
+    if (appConfig.appEnv !== "local-demo") {
+      try {
+        await api("/admin/auth/logout", { method: "POST" });
+      } catch (error) {
+        clearStaffSession();
+        setToast(`已退出本机；服务端撤销失败：${error.message}`, "error");
+        return;
+      }
+    }
     clearStaffSession();
     setToast("已退出", "success");
-  });
-  document.querySelector("#saveApiBaseBtn")?.addEventListener("click", () => {
-    saveApiBaseUrl(document.querySelector("#apiBaseInput")?.value);
-    setToast("API 地址已保存", "success");
   });
   document.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.activeTab = button.dataset.tab;
+      if (state.activeTab === "demo") state.demoState = null;
       render();
-      if (state.activeTab === "dashboard" && !state.dashboard) {
-        await loadDashboard();
-      }
-      if (state.activeTab === "orders" && !state.bookings.length) {
-        await loadBookings();
-      }
-      if (state.activeTab === "demo") {
-        state.demoState = null;
-        await loadDemoState();
-      }
+      await loadActiveTab();
     });
   });
   document.querySelector("#dashboardForm")?.addEventListener("submit", async (event) => {
@@ -750,12 +829,16 @@ function bindEvents() {
   document.querySelector("#redeemForm")?.addEventListener("submit", redeemCoupon);
   document.querySelector("#loadDemoStateBtn")?.addEventListener("click", loadDemoState);
   document.querySelector("#resetDemoForm")?.addEventListener("submit", resetDemo);
+  document.querySelector("#refreshAuditBtn")?.addEventListener("click", () => loadAuditLogs());
+  document.querySelectorAll("[data-audit-page]").forEach((button) => {
+    button.addEventListener("click", () => loadAuditLogs(Number(button.dataset.auditPage)));
+  });
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   loadState();
   render();
   if (state.token) {
-    loadDashboard();
+    loadActiveTab();
   }
 }

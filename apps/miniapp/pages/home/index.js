@@ -18,7 +18,8 @@ Page({
     bookingCount: 0,
     referralCount: 0,
     rewardText: "¥0.00",
-    isPhoneBound: false
+    isPhoneBound: false,
+    loadError: ""
   },
 
   onLoad(options) {
@@ -47,7 +48,7 @@ Page({
 
   async loadHome() {
     this.syncRuntimeState();
-    this.setData({ loading: true });
+    this.setData({ loading: true, loadError: "" });
 
     try {
       const app = getApp();
@@ -69,6 +70,11 @@ Page({
       });
       this.syncRuntimeState();
     } catch (error) {
+      this.setData({
+        loadError: error.message || "首页加载失败",
+        hotelAddress: "", hotelPhone: "", hotelTagsText: "", priceText: "--",
+        walletText: "--", couponCount: 0, bookingCount: 0, referralCount: 0, rewardText: "--"
+      });
       wx.showToast({
         title: error.message || "首页加载失败",
         icon: "none"

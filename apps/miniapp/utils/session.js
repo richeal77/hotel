@@ -1,5 +1,7 @@
 const TOKEN_KEY = "hotel_member_token";
 const AUTH_MEMBER_KEY = "hotel_auth_member";
+const LIVE_TOKEN_KEY = "hotel_live_member_token";
+const LIVE_AUTH_MEMBER_KEY = "hotel_live_auth_member";
 const LAUNCH_CONTEXT_KEY = "hotel_launch_context";
 const { createRuntimeSettings } = require("./settings");
 
@@ -21,19 +23,19 @@ function write(key, value) {
 }
 
 function getToken() {
-  return read(TOKEN_KEY, "");
+  return read(getApiMode() === "live" ? LIVE_TOKEN_KEY : TOKEN_KEY, "");
 }
 
 function setToken(token) {
-  write(TOKEN_KEY, token || "");
+  write(getApiMode() === "live" ? LIVE_TOKEN_KEY : TOKEN_KEY, token || "");
 }
 
 function getAuthMember() {
-  return read(AUTH_MEMBER_KEY, null);
+  return read(getApiMode() === "live" ? LIVE_AUTH_MEMBER_KEY : AUTH_MEMBER_KEY, null);
 }
 
 function setAuthMember(member) {
-  write(AUTH_MEMBER_KEY, member || null);
+  write(getApiMode() === "live" ? LIVE_AUTH_MEMBER_KEY : AUTH_MEMBER_KEY, member || null);
 }
 
 function getLaunchContext() {
@@ -66,8 +68,27 @@ function getApiBaseUrl() {
   return getRuntimeSettings().getApiBaseUrl();
 }
 
+function getHttpApiBaseUrl() {
+  return getRuntimeSettings().getHttpApiBaseUrl();
+}
+
 function setApiBaseUrl(url) {
   return getRuntimeSettings().setApiBaseUrl(url);
+}
+
+function getLiveApiBaseUrl() {
+  return getRuntimeSettings().getLiveApiBaseUrl();
+}
+
+function setLiveApiBaseUrl(url) {
+  const settings = getRuntimeSettings();
+  const previous = settings.getLiveApiBaseUrl();
+  const normalized = settings.setLiveApiBaseUrl(url);
+  if (normalized !== previous) {
+    write(LIVE_TOKEN_KEY, "");
+    write(LIVE_AUTH_MEMBER_KEY, null);
+  }
+  return normalized;
 }
 
 function createWxStorageAdapter() {
@@ -85,13 +106,16 @@ module.exports = {
   createWxStorageAdapter,
   getApiBaseUrl,
   getApiMode,
+  getHttpApiBaseUrl,
   getAuthMember,
   getLaunchContext,
+  getLiveApiBaseUrl,
   getRuntimeSettings,
   getToken,
   setApiBaseUrl,
   setApiMode,
   setAuthMember,
   setLaunchContext,
+  setLiveApiBaseUrl,
   setToken
 };

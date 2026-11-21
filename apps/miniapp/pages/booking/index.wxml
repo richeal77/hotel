@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 无真实支付</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">暂不支持线上支付</text>
   </view>
 
   <view class="section panel">

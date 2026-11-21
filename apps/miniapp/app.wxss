@@ -39,6 +39,8 @@ button::after {
 
 .api-mode {
   color: #c7d2fe;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .section {

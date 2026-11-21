@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 直接推荐一层</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">直接推荐一层</text>
   </view>
 
   <view class="section panel">

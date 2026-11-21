@@ -1,9 +1,8 @@
 const { createApiClient } = require("./utils/api");
 const { createDemoResponder } = require("./utils/demo-api");
 const { parseLaunchContext } = require("./utils/scene");
-const config = require("./utils/config");
 const session = require("./utils/session");
-const { LOCAL_DEMO_MODE, apiModeText } = require("./utils/settings");
+const { LOCAL_DEMO_MODE, LIVE_MODE, apiModeText } = require("./utils/settings");
 
 App({
   globalData: {
@@ -11,7 +10,6 @@ App({
     apiBaseUrl: session.getApiBaseUrl(),
     apiMode: session.getApiMode(),
     apiModeText: apiModeText(session.getApiMode()),
-    demoCode: config.demoCode,
     launchContext: session.getLaunchContext()
   },
 
@@ -29,18 +27,17 @@ App({
   setupApi() {
     const apiMode = session.getApiMode();
     const apiBaseUrl = session.getApiBaseUrl();
-    const demoResponder = createDemoResponder({
-      storage: session.createWxStorageAdapter()
-    });
+    const demoResponder = apiMode === LOCAL_DEMO_MODE
+      ? createDemoResponder({ storage: session.createWxStorageAdapter() })
+      : null;
 
     this.globalData.apiBaseUrl = apiBaseUrl;
     this.globalData.apiMode = apiMode;
     this.globalData.apiModeText = apiModeText(apiMode);
-    this.globalData.api = createApiClient({
+    this.globalData.api = apiMode === LIVE_MODE && !apiBaseUrl ? null : createApiClient({
       baseUrl: apiBaseUrl,
       getToken: session.getToken,
       demoOnly: apiMode === LOCAL_DEMO_MODE,
-      enableFallback: apiMode === LOCAL_DEMO_MODE,
       fallback: demoResponder,
       onFallback: () => {}
     });
@@ -79,12 +76,20 @@ App({
   },
 
   login() {
+    if (!this.globalData.api) return Promise.reject(new Error("请先在我的页面配置真实 HTTPS API 域名"));
     const context = this.globalData.launchContext || session.getLaunchContext();
-    return this.globalData.api
-      .mockLogin({
+    const payload = {
         scene: context.scene,
         referrerMemberId: context.referrerMemberId
-      })
+    };
+    const loginRequest = this.globalData.apiMode === LIVE_MODE
+      ? new Promise((resolve, reject) => wx.login({ success: resolve, fail: reject }))
+        .then((result) => {
+          if (!result.code) throw new Error("微信登录失败");
+          return this.globalData.api.wxLogin(result.code, payload);
+        })
+      : this.globalData.api.mockLogin(payload);
+    return loginRequest
       .then((data) => {
         session.setToken(data.member_token);
         session.setAuthMember(data.member);
@@ -105,6 +110,14 @@ App({
   },
 
   refreshLogin() {
+    if (this.globalData.apiMode === LIVE_MODE && session.getToken()) {
+      return this.globalData.api.logout().catch(() => {}).then(() => {
+        session.setToken("");
+        session.setAuthMember(null);
+        this.loginReady = null;
+        return this.ensureLogin();
+      });
+    }
     this.loginReady = null;
     return this.ensureLogin();
   }

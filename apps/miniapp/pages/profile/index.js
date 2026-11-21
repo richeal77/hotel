@@ -1,6 +1,6 @@
 const { money } = require("../../utils/format");
 const session = require("../../utils/session");
-const { HTTP_MODE, LOCAL_DEMO_MODE } = require("../../utils/settings");
+const { HTTP_MODE, LOCAL_DEMO_MODE, LIVE_MODE } = require("../../utils/settings");
 
 Page({
   data: {
@@ -12,7 +12,9 @@ Page({
     apiMode: HTTP_MODE,
     apiBaseUrl: "",
     apiBaseInput: "",
+    liveApiBaseInput: "",
     localDemoEnabled: false,
+    liveEnabled: false,
     walletText: "¥0.00",
     couponCount: 0,
     bookingCount: 0
@@ -34,8 +36,10 @@ Page({
       apiMode: runtime.apiMode,
       apiModeText: runtime.apiModeText,
       apiBaseUrl: runtime.apiBaseUrl,
-      apiBaseInput: runtime.apiBaseUrl,
-      localDemoEnabled: runtime.apiMode === LOCAL_DEMO_MODE
+      apiBaseInput: session.getHttpApiBaseUrl(),
+      liveApiBaseInput: session.getLiveApiBaseUrl(),
+      localDemoEnabled: runtime.apiMode === LOCAL_DEMO_MODE,
+      liveEnabled: runtime.apiMode === LIVE_MODE
     });
   },
 
@@ -59,13 +63,16 @@ Page({
         apiMode: app.getRuntimeStatus().apiMode,
         apiModeText: app.getRuntimeStatus().apiModeText,
         apiBaseUrl: app.getRuntimeStatus().apiBaseUrl,
-        apiBaseInput: app.getRuntimeStatus().apiBaseUrl,
+        apiBaseInput: session.getHttpApiBaseUrl(),
+        liveApiBaseInput: session.getLiveApiBaseUrl(),
         localDemoEnabled: app.getRuntimeStatus().apiMode === LOCAL_DEMO_MODE,
+        liveEnabled: app.getRuntimeStatus().apiMode === LIVE_MODE,
         walletText: money(home.wallet_balance_cent),
         couponCount: home.coupon_count,
         bookingCount: home.booking_count
       });
     } catch (error) {
+      this.setData({ member: {}, memberCode: "", walletText: "--", couponCount: 0, bookingCount: 0 });
       wx.showToast({
         title: error.message || "我的页面加载失败",
         icon: "none"
@@ -113,15 +120,40 @@ Page({
     }
   },
 
+  saveLiveApiBaseUrl() {
+    try {
+      session.setLiveApiBaseUrl(this.data.liveApiBaseInput);
+      getApp().applyRuntimeSettings();
+      this.syncRuntimeSettings();
+      if (this.data.liveEnabled) this.loadProfile();
+      wx.showToast({ title: "真实接口域名已保存", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "域名无效", icon: "none" });
+    }
+  },
+
   toggleLocalDemo(event) {
     const nextMode = event.detail.value ? LOCAL_DEMO_MODE : HTTP_MODE;
     session.setApiMode(nextMode);
     getApp().applyRuntimeSettings();
     this.syncRuntimeSettings();
+    this.loadProfile();
     wx.showToast({
       title: nextMode === LOCAL_DEMO_MODE ? "已开启本地演示" : "已切回 HTTP",
       icon: "none"
     });
+  },
+
+  toggleLive(event) {
+    try {
+      session.setApiMode(event.detail.value ? LIVE_MODE : HTTP_MODE);
+      getApp().applyRuntimeSettings();
+      this.syncRuntimeSettings();
+      this.loadProfile();
+    } catch (error) {
+      this.syncRuntimeSettings();
+      wx.showToast({ title: error.message || "切换失败", icon: "none" });
+    }
   },
 
   goPage(event) {

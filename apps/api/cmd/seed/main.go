@@ -11,6 +11,9 @@ import (
 )
 
 func main() {
+	if mode := os.Getenv("APP_ENV"); mode != "" && mode != "local-demo" {
+		log.Fatal("seed is available only in local-demo")
+	}
 	reset := flag.Bool("reset", false, "reset local demo data")
 	flag.Parse()
 

@@ -73,13 +73,12 @@ function createApiClient(options) {
   const baseUrl = settings.baseUrl || DEFAULT_BASE_URL;
   const getToken = settings.getToken || (() => "");
   const fallback = settings.fallback;
-  const enableFallback = settings.enableFallback === true;
   const demoOnly = settings.demoOnly === true;
   const onFallback = settings.onFallback || (() => {});
   const request = settings.request || ((requestOptions) => wx.request(requestOptions));
 
   function runFallback(descriptor, reason) {
-    if (!fallback || (!enableFallback && !demoOnly)) {
+    if (!fallback || !demoOnly) {
       throw createApiError(reason && reason.errMsg ? reason.errMsg : "网络请求失败", reason);
     }
 
@@ -119,15 +118,11 @@ function createApiClient(options) {
           try {
             resolve(unwrapApiResponse(response));
           } catch (error) {
-            if (response && response.statusCode && (response.statusCode < 200 || response.statusCode >= 300)) {
-              Promise.resolve(runFallback(requestDescriptor, error)).then(resolve).catch(reject);
-              return;
-            }
             reject(error);
           }
         },
         fail(error) {
-          Promise.resolve(runFallback(requestDescriptor, error)).then(resolve).catch(reject);
+          reject(createApiError(error && error.errMsg ? error.errMsg : "网络请求失败", error));
         }
       };
 
@@ -143,6 +138,18 @@ function createApiClient(options) {
         data: normalizeMockLoginRequest(payload || {}),
         auth: false
       });
+    },
+    wxLogin(code, payload) {
+      return send({ method: "POST", path: "/auth/wx-login", data: {
+        wx_login_code: code,
+        ...normalizeMockLoginRequest(payload || {})
+      }, auth: false });
+    },
+    wxBindPhone(code) {
+      return send({ method: "POST", path: "/auth/wx-bind-phone", data: { phone_code: code } });
+    },
+    logout() {
+      return send({ method: "POST", path: "/auth/logout" });
     },
     sendCode(phone) {
       return send({

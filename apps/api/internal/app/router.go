@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,35 +14,70 @@ func NewRouter(service *Service) http.Handler {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(withClientIP(c.Request.Context(), c.ClientIP()))
+		c.Next()
+	})
+	_ = router.SetTrustedProxies(nil)
+	limiter := newRateLimiter()
 
 	api := router.Group("/api/v1")
-	api.POST("/auth/mock-login", func(c *gin.Context) {
-		var req MockLoginRequest
-		if !bindJSON(c, &req) {
-			return
-		}
-		result, err := service.MockLogin(c.Request.Context(), req)
-		respond(c, result, err)
-	})
-	api.POST("/auth/send-code", func(c *gin.Context) {
-		var req SendCodeRequest
-		if !bindJSON(c, &req) {
-			return
-		}
-		result, err := service.SendCode(c.Request.Context(), req)
-		respond(c, result, err)
-	})
+	if service.live == nil {
+		api.POST("/auth/mock-login", limited(limiter, 20, time.Minute), func(c *gin.Context) {
+			var req MockLoginRequest
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.MockLogin(c.Request.Context(), req)
+			respond(c, result, err)
+		})
+	}
+	if service.live != nil {
+		api.POST("/auth/wx-login", limited(limiter, 20, time.Minute), func(c *gin.Context) {
+			var req WxLoginRequest
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.live.LoginWeChat(c.Request.Context(), service, req)
+			respond(c, result, err)
+		})
+	}
+	if service.live == nil {
+		api.POST("/auth/send-code", limited(limiter, 5, time.Minute), func(c *gin.Context) {
+			var req SendCodeRequest
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.SendCode(c.Request.Context(), req)
+			respond(c, result, err)
+		})
+	}
 
 	member := api.Group("")
 	member.Use(memberAuth(service))
-	member.POST("/auth/bind-phone", func(c *gin.Context) {
-		var req BindPhoneRequest
-		if !bindJSON(c, &req) {
-			return
-		}
-		result, err := service.BindPhone(c.Request.Context(), memberID(c), req)
-		respond(c, gin.H{"member": result}, err)
-	})
+	if service.live == nil {
+		member.POST("/auth/bind-phone", func(c *gin.Context) {
+			var req BindPhoneRequest
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.BindPhone(c.Request.Context(), memberID(c), req)
+			respond(c, gin.H{"member": result}, err)
+		})
+	}
+	if service.live != nil {
+		member.POST("/auth/wx-bind-phone", limited(limiter, 10, time.Minute), func(c *gin.Context) {
+			var req WxBindPhoneRequest
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.live.BindWeChatPhone(c.Request.Context(), service, memberID(c), req.PhoneCode)
+			respond(c, gin.H{"member": result}, err)
+		})
+		member.POST("/auth/logout", func(c *gin.Context) {
+			respond(c, gin.H{}, service.live.Revoke(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))))
+		})
+	}
 	member.POST("/members/join", func(c *gin.Context) {
 		var req JoinMemberRequest
 		if !bindJSON(c, &req) {
@@ -94,50 +130,65 @@ func NewRouter(service *Service) http.Handler {
 	})
 
 	admin := api.Group("/admin")
-	admin.POST("/auth/login", func(c *gin.Context) {
+	admin.POST("/auth/login", limited(limiter, 5, time.Minute), func(c *gin.Context) {
 		var req AdminLoginRequest
 		if !bindJSON(c, &req) {
 			return
 		}
-		result, err := service.AdminLogin(c.Request.Context(), req)
+		var result AdminLoginResult
+		var err error
+		if service.live != nil {
+			result, err = service.live.LoginStaff(c.Request.Context(), service, req)
+		} else {
+			result, err = service.AdminLogin(c.Request.Context(), req)
+		}
 		respond(c, result, err)
 	})
+	if service.live != nil {
+		admin.POST("/auth/logout", staffAuth(service), func(c *gin.Context) {
+			err := service.live.Revoke(c.Request.Context(), bearerToken(c.GetHeader("Authorization")))
+			if err == nil {
+				err = service.AuditStaffEvent(c.Request.Context(), staffID(c), "staff.logout", "staff session revoked")
+			}
+			respond(c, gin.H{}, err)
+		})
+	}
 
 	adminAuthed := admin.Group("")
 	adminAuthed.Use(staffAuth(service))
-	adminAuthed.GET("/dashboard/summary", func(c *gin.Context) {
+	adminAuthed.GET("/dashboard/summary", requireRoles(service, RoleBoss, RoleManager), func(c *gin.Context) {
 		result, err := service.GetDashboardSummary(c.Request.Context(), c.Query("date"))
 		respond(c, result, err)
 	})
-	adminAuthed.GET("/bookings", func(c *gin.Context) {
+	adminAuthed.GET("/bookings", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		result, err := service.ListBookings(c.Request.Context(), BookingStatus(c.Query("status")), page(c), pageSize(c))
-		respond(c, result, err)
+		respondStaff(c, service, result, err)
 	})
-	adminAuthed.PATCH("/bookings/:order_id/status", func(c *gin.Context) {
+	adminAuthed.PATCH("/bookings/:order_id/status", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		var req UpdateBookingStatusRequest
 		if !bindJSON(c, &req) {
 			return
 		}
 		result, err := service.UpdateBookingStatus(c.Request.Context(), staffID(c), c.Param("order_id"), req)
-		respond(c, gin.H{"order": result}, err)
+		respondStaff(c, service, gin.H{"order": result}, err)
 	})
-	adminAuthed.GET("/members", func(c *gin.Context) {
+	adminAuthed.GET("/members", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		result, err := service.ListMembers(c.Request.Context(), c.Query("keyword"), page(c), pageSize(c))
-		respond(c, result, err)
+		respondStaff(c, service, result, err)
 	})
-	adminAuthed.PATCH("/members/:member_id/status", func(c *gin.Context) {
+	adminAuthed.PATCH("/members/:member_id/status", requireRoles(service, RoleBoss, RoleManager), func(c *gin.Context) {
 		var req UpdateMemberStatusRequest
 		if !bindJSON(c, &req) {
 			return
 		}
 		result, err := service.UpdateMemberStatus(c.Request.Context(), staffID(c), c.Param("member_id"), req)
-		respond(c, gin.H{"member": result}, err)
+		respondStaff(c, service, gin.H{"member": result}, err)
 	})
-	adminAuthed.GET("/redemption/lookup", func(c *gin.Context) {
+	adminAuthed.GET("/redemption/lookup", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		result, err := service.LookupRedemption(c.Request.Context(), c.Query("keyword"))
-		respond(c, result, err)
+		respondStaff(c, service, result, err)
 	})
-	adminAuthed.POST("/coupons/:coupon_id/redeem", func(c *gin.Context) {
+	adminAuthed.POST("/coupons/:coupon_id/redeem", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		var req RedeemCouponRequest
 		if !bindJSON(c, &req) {
 			return
@@ -145,7 +196,7 @@ func NewRouter(service *Service) http.Handler {
 		result, err := service.RedeemCoupon(c.Request.Context(), staffID(c), c.Param("coupon_id"), req)
 		respond(c, gin.H{"coupon": result}, err)
 	})
-	adminAuthed.POST("/wallets/:member_id/adjust", func(c *gin.Context) {
+	adminAuthed.POST("/wallets/:member_id/adjust", requireRoles(service, RoleBoss, RoleManager, RoleFinance), func(c *gin.Context) {
 		var req AdjustWalletRequest
 		if !bindJSON(c, &req) {
 			return
@@ -153,15 +204,15 @@ func NewRouter(service *Service) http.Handler {
 		wallet, ledger, err := service.AdjustWallet(c.Request.Context(), staffID(c), c.Param("member_id"), req)
 		respond(c, gin.H{"wallet": wallet, "ledger": ledger}, err)
 	})
-	adminAuthed.GET("/referrals/rewards", func(c *gin.Context) {
+	adminAuthed.GET("/referrals/rewards", requireRoles(service, RoleBoss, RoleManager, RoleFinance), func(c *gin.Context) {
 		result, err := service.ListReferralRewards(c.Request.Context(), RewardStatus(c.Query("status")), page(c), pageSize(c))
 		respond(c, result, err)
 	})
-	adminAuthed.GET("/rules", func(c *gin.Context) {
+	adminAuthed.GET("/rules", requireRoles(service, RoleBoss), func(c *gin.Context) {
 		result, err := service.GetRules(c.Request.Context())
 		respond(c, result, err)
 	})
-	adminAuthed.PATCH("/rules", func(c *gin.Context) {
+	adminAuthed.PATCH("/rules", requireRoles(service, RoleBoss), func(c *gin.Context) {
 		var req RuleConfig
 		if !bindJSON(c, &req) {
 			return
@@ -169,26 +220,54 @@ func NewRouter(service *Service) http.Handler {
 		result, err := service.UpdateRules(c.Request.Context(), staffID(c), req)
 		respond(c, result, err)
 	})
-	adminAuthed.GET("/audit-logs", func(c *gin.Context) {
+	adminAuthed.GET("/audit-logs", requireRoles(service, RoleBoss, RoleFinance), func(c *gin.Context) {
 		result, err := service.ListAuditLogs(c.Request.Context(), page(c), pageSize(c))
-		respond(c, result, err)
+		respondStaff(c, service, result, err)
 	})
-	adminAuthed.GET("/demo/state", func(c *gin.Context) {
-		result, err := service.GetDemoState(c.Request.Context())
-		respond(c, result, err)
-	})
-	adminAuthed.POST("/demo/reset", func(c *gin.Context) {
-		var req struct {
-			ConfirmText string `json:"confirm_text"`
-		}
-		if !bindJSON(c, &req) {
-			return
-		}
-		result, err := service.ResetDemo(c.Request.Context(), staffID(c), req.ConfirmText)
-		respond(c, result, err)
-	})
+	if service.live == nil {
+		adminAuthed.GET("/demo/state", requireRoles(service, RoleBoss), func(c *gin.Context) {
+			result, err := service.GetDemoState(c.Request.Context())
+			respond(c, result, err)
+		})
+		adminAuthed.POST("/demo/reset", requireRoles(service, RoleBoss), func(c *gin.Context) {
+			var req struct {
+				ConfirmText string `json:"confirm_text"`
+			}
+			if !bindJSON(c, &req) {
+				return
+			}
+			result, err := service.ResetDemo(c.Request.Context(), staffID(c), req.ConfirmText)
+			respond(c, result, err)
+		})
+	}
 
 	return router
+}
+
+func respondStaff(c *gin.Context, service *Service, data interface{}, err error) {
+	if err == nil && service.live != nil {
+		data = maskStaffData(data)
+	}
+	respond(c, data, err)
+}
+
+func requireRoles(service *Service, allowed ...Role) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		staff, err := service.StaffByID(c.Request.Context(), staffID(c))
+		if err != nil {
+			respond(c, nil, err)
+			c.Abort()
+			return
+		}
+		for _, role := range allowed {
+			if staff.Role == role {
+				c.Next()
+				return
+			}
+		}
+		respond(c, nil, forbidden("无权限"))
+		c.Abort()
+	}
 }
 
 func bindJSON(c *gin.Context, dest interface{}) bool {
@@ -215,7 +294,7 @@ func respond(c *gin.Context, data interface{}, err error) {
 func memberAuth(service *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerToken(c.GetHeader("Authorization"))
-		id, ok := MemberIDFromToken(token)
+		id, ok := service.ResolveMemberToken(c.Request.Context(), token)
 		if !ok || !service.MemberExists(c.Request.Context(), id) {
 			respond(c, nil, unauthorized("未登录或 token 失效"))
 			c.Abort()
@@ -229,7 +308,7 @@ func memberAuth(service *Service) gin.HandlerFunc {
 func staffAuth(service *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerToken(c.GetHeader("Authorization"))
-		id, ok := StaffIDFromToken(token)
+		id, ok := service.ResolveStaffToken(c.Request.Context(), token)
 		if !ok || !service.StaffExists(c.Request.Context(), id) {
 			respond(c, nil, unauthorized("未登录或 token 失效"))
 			c.Abort()

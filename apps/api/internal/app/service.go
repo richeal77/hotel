@@ -14,6 +14,8 @@ import (
 type Service struct {
 	repo Repository
 	now  func() time.Time
+	live *LiveAuth
+	mode string
 }
 
 type ServiceOption func(*Service)
@@ -22,11 +24,20 @@ func NewService(repo Repository, options ...ServiceOption) *Service {
 	service := &Service{
 		repo: repo,
 		now:  time.Now,
+		mode: "local-demo",
 	}
 	for _, option := range options {
 		option(service)
 	}
 	return service
+}
+
+func WithLiveAuth(auth *LiveAuth) ServiceOption {
+	return func(service *Service) { service.live = auth; service.mode = "integration" }
+}
+
+func WithMode(mode string) ServiceOption {
+	return func(service *Service) { service.mode = mode }
 }
 
 func WithClock(clock func() time.Time) ServiceOption {
@@ -64,6 +75,27 @@ func (s *Service) MockLogin(ctx context.Context, req MockLoginRequest) (MockLogi
 	return result, err
 }
 
+func (s *Service) LoginByOpenID(ctx context.Context, openID, scene, referrerID string) (MemberAuthProfile, error) {
+	var result MemberAuthProfile
+	if openID == "" {
+		return result, badInput("微信登录失败")
+	}
+	err := s.repo.Update(func(store *Store) error {
+		for _, member := range store.Members {
+			if member.OpenID == openID {
+				result = authProfile(member)
+				return nil
+			}
+		}
+		now := formatTime(s.now())
+		member := Member{ID: nextID("mbr", memberIDs(store.Members)), OpenID: openID, Source: sourceFromScene(scene), SourceScene: scene, ReferrerMemberID: referrerID, Status: MemberStatusActive, CreatedAt: now, UpdatedAt: now}
+		store.Members = append(store.Members, member)
+		result = authProfile(member)
+		return nil
+	})
+	return result, err
+}
+
 func (s *Service) SendCode(ctx context.Context, req SendCodeRequest) (map[string]interface{}, error) {
 	if strings.TrimSpace(req.Phone) == "" {
 		return nil, badInput("手机号不能为空")
@@ -75,22 +107,26 @@ func (s *Service) SendCode(ctx context.Context, req SendCodeRequest) (map[string
 }
 
 func (s *Service) BindPhone(ctx context.Context, memberID string, req BindPhoneRequest) (MemberAuthProfile, error) {
+	if req.Code != "666666" {
+		return MemberAuthProfile{}, badCode("验证码错误")
+	}
+	return s.BindVerifiedPhone(ctx, memberID, req.Phone)
+}
+
+func (s *Service) BindVerifiedPhone(ctx context.Context, memberID, phone string) (MemberAuthProfile, error) {
 	var result MemberAuthProfile
 	err := s.repo.Update(func(store *Store) error {
-		if req.Code != "666666" {
-			return badCode("验证码错误")
-		}
-		if strings.TrimSpace(req.Phone) == "" {
+		if strings.TrimSpace(phone) == "" {
 			return badInput("手机号不能为空")
 		}
 		index := findMemberIndex(store.Members, memberID)
 		if index < 0 {
 			return unauthorized("未登录或 token 失效")
 		}
-		if phoneOwnedByAnotherMember(store.Members, req.Phone, memberID) {
+		if phoneOwnedByAnotherMember(store.Members, phone, memberID) {
 			return conflict("手机号已绑定其他会员")
 		}
-		store.Members[index].Phone = req.Phone
+		store.Members[index].Phone = phone
 		store.Members[index].UpdatedAt = formatTime(s.now())
 		result = authProfile(store.Members[index])
 		return nil
@@ -155,7 +191,7 @@ func (s *Service) JoinMember(ctx context.Context, memberID string, req JoinMembe
 		coupon := issueCouponLocked(store, store.Members[currentIndex].ID, store.CouponTemplates[templateIndex], s.now())
 		coupons = append(coupons, coupon.Summary())
 		member = store.Members[currentIndex]
-		appendAuditLocked(store, "system", "member.join", "member", member.ID, "join member", nil, toMap(member), "", now)
+		appendAuditLocked(store, "system", "member.join", "member", member.ID, "join member", nil, toMap(member), auditIP(ctx), now)
 		return nil
 	})
 	return member, coupons, err
@@ -532,7 +568,7 @@ func (s *Service) UpdateBookingStatus(ctx context.Context, staffID string, order
 			incrementStayLocked(store, current.MemberID, current.CheckoutDate, now)
 		}
 		store.Orders[orderIndex] = current
-		appendAuditLocked(store, staff.ID, "booking.status.update", "booking_order", current.ID, fmt.Sprintf("%s -> %s", before["status"], current.Status), before, toMap(current), "", now)
+		appendAuditLocked(store, staff.ID, "booking.status.update", "booking_order", current.ID, fmt.Sprintf("%s -> %s", before["status"], current.Status), before, toMap(current), auditIP(ctx), now)
 		result = current
 		return nil
 	})
@@ -580,7 +616,7 @@ func (s *Service) UpdateMemberStatus(ctx context.Context, staffID string, member
 		store.Members[index].Status = req.Status
 		store.Members[index].UpdatedAt = now
 		result = store.Members[index]
-		appendAuditLocked(store, staff.ID, "member.status.update", "member", memberID, req.Reason, before, toMap(result), "", now)
+		appendAuditLocked(store, staff.ID, "member.status.update", "member", memberID, req.Reason, before, toMap(result), auditIP(ctx), now)
 		return nil
 	})
 	return result, err
@@ -674,7 +710,7 @@ func (s *Service) RedeemCoupon(ctx context.Context, staffID string, couponID str
 		coupon.UpdatedAt = now
 		store.Coupons[couponIndex] = coupon
 		result = coupon
-		appendAuditLocked(store, staff.ID, "coupon.redeem", "coupon", coupon.ID, fmt.Sprintf("redeem for order %s", req.OrderID), before, toMap(coupon), "", now)
+		appendAuditLocked(store, staff.ID, "coupon.redeem", "coupon", coupon.ID, fmt.Sprintf("redeem for order %s", req.OrderID), before, toMap(coupon), auditIP(ctx), now)
 		return nil
 	})
 	return result, err
@@ -721,7 +757,7 @@ func (s *Service) AdjustWallet(ctx context.Context, staffID string, memberID str
 		store.WalletLedgers = append(store.WalletLedgers, ledger)
 		applyWalletLedgerLocked(store, ledger, now)
 		wallet = walletForMember(store, memberID)
-		appendAuditLocked(store, staff.ID, "wallet.adjust", "wallet", memberID, req.Reason, nil, toMap(ledger), "", now)
+		appendAuditLocked(store, staff.ID, "wallet.adjust", "wallet", memberID, req.Reason, nil, toMap(ledger), auditIP(ctx), now)
 		return nil
 	})
 	return wallet, ledger, err
@@ -778,7 +814,7 @@ func (s *Service) UpdateRules(ctx context.Context, staffID string, req RuleConfi
 		store.RuleConfig = req
 		result = req
 		now := formatTime(s.now())
-		appendAuditLocked(store, staff.ID, "rules.update", "rule_config", "rule_config", "update rules", before, toMap(req), "", now)
+		appendAuditLocked(store, staff.ID, "rules.update", "rule_config", "rule_config", "update rules", before, toMap(req), auditIP(ctx), now)
 		return nil
 	})
 	return result, err
@@ -821,12 +857,22 @@ func (s *Service) ResetDemo(ctx context.Context, staffID string, confirmText str
 	if staff.Role != RoleBoss {
 		return DemoState{}, forbidden("无权限")
 	}
-	appendAuditLocked(&store, staff.ID, "demo.reset", "demo", "demo", "reset demo data", nil, nil, "", now)
+	appendAuditLocked(&store, staff.ID, "demo.reset", "demo", "demo", "reset demo data", nil, nil, auditIP(ctx), now)
 	state = demoState(&store)
 	if err := s.repo.Replace(store); err != nil {
 		return DemoState{}, err
 	}
 	return state, nil
+}
+
+func (s *Service) AuditStaffEvent(ctx context.Context, staffID, action, summary string) error {
+	return s.repo.Update(func(store *Store) error {
+		if _, err := requireStaff(store, staffID); err != nil {
+			return err
+		}
+		appendAuditLocked(store, staffID, action, "staff", staffID, summary, nil, nil, auditIP(ctx), formatTime(s.now()))
+		return nil
+	})
 }
 
 func (s *Service) staffFromStore(ctx context.Context, staffID string) (StaffUser, error) {
@@ -1003,9 +1049,9 @@ func appendAuditLocked(store *Store, staffID string, action string, targetType s
 		Action:          action,
 		TargetType:      targetType,
 		TargetID:        targetID,
-		Summary:         summary,
-		Before:          before,
-		After:           after,
+		Summary:         maskPhoneText(summary),
+		Before:          maskAuditMap(before),
+		After:           maskAuditMap(after),
 		IP:              ip,
 		CreatedAt:       now,
 	})

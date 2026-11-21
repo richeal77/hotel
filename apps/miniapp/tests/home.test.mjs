@@ -55,3 +55,30 @@ test("home reloads summary after returning from another page without double load
   assert.equal(page.data.couponCount, 2);
   assert.equal(page.data.walletText, "¥2.00");
 });
+
+test("home clears stale summary and exposes an HTTP loading error", async () => {
+  let pageDefinition;
+  const app = {
+    getRuntimeStatus: () => ({ apiMode: "live", apiModeText: "真实微信接口" }),
+    globalData: {
+      launchContext: {},
+      api: { async getHome() { throw new Error("请求超时"); } }
+    },
+    async ensureLogin() {}
+  };
+  vm.runInNewContext(readFileSync(pageFile, "utf8"), {
+    require,
+    Page(definition) { pageDefinition = definition; },
+    getApp: () => app,
+    wx: { showToast() {} }
+  }, { filename: pageFile.pathname });
+  const page = {
+    ...pageDefinition,
+    data: { ...pageDefinition.data, walletText: "¥99.00", couponCount: 9 },
+    setData(changes) { Object.assign(this.data, changes); }
+  };
+  await page.onShow();
+  assert.equal(page.data.loadError, "请求超时");
+  assert.equal(page.data.walletText, "--");
+  assert.equal(page.data.couponCount, 0);
+});

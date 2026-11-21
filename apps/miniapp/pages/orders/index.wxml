@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 前台确认</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">订单由前台确认</text>
   </view>
 
   <view class="section" wx:if="{{orders.length}}">

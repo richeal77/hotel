@@ -1,7 +1,7 @@
 <view class="page">
   <view class="demo-ribbon">
-    <text>演示模式</text>
-    <text class="api-mode">{{apiModeText}} · 会员码演示</text>
+    <text>{{apiModeText}}</text>
+    <text class="api-mode">到店出示会员码</text>
   </view>
 
   <view class="section panel member-card">

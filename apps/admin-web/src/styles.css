@@ -294,6 +294,28 @@ h3 {
   overflow-x: auto;
 }
 
+.table-panel pre {
+  max-width: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}
+
+.table-panel summary {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
 .empty {
   display: grid;
   place-items: center;

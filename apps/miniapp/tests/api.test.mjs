@@ -59,6 +59,25 @@ test("mock login uses the contract route and body without bearer auth", async ()
   assert.equal(recorder.calls[0].header.Authorization, undefined);
 });
 
+test("live WeChat login and phone binding use the new contract routes", async () => {
+  const recorder = createRequestRecorder();
+  const client = createApiClient({
+    baseUrl: "https://api.example.com/api/v1",
+    request: recorder.request,
+    getToken: () => "live-member-token"
+  });
+
+  await client.wxLogin("login-code", { scene: "frontdesk_qr", referrerMemberId: "mbr_009" });
+  await client.wxBindPhone("phone-code");
+
+  assert.equal(recorder.calls[0].url, "https://api.example.com/api/v1/auth/wx-login");
+  assert.deepEqual(recorder.calls[0].data, { wx_login_code: "login-code", scene: "frontdesk_qr", referrer_member_id: "mbr_009" });
+  assert.equal(recorder.calls[0].header.Authorization, undefined);
+  assert.equal(recorder.calls[1].url, "https://api.example.com/api/v1/auth/wx-bind-phone");
+  assert.deepEqual(recorder.calls[1].data, { phone_code: "phone-code" });
+  assert.equal(recorder.calls[1].header.Authorization, "Bearer live-member-token");
+});
+
 test("member endpoints send bearer auth and unwrap API response data", async () => {
   const recorder = createRequestRecorder({
     code: 0,
@@ -131,6 +150,22 @@ test("non-zero API responses reject with the server message", async () => {
   );
 });
 
+test("HTTP error keeps the server message and never uses demo data", async () => {
+  let fallbackCalled = false;
+  const client = createApiClient({
+    baseUrl: "https://api.example.com/api/v1",
+    request(options) {
+      options.success({ statusCode: 401, data: { message: "登录已失效" } });
+    },
+    fallback() {
+      fallbackCalled = true;
+      return { hotel: { name: "demo" } };
+    }
+  });
+  await assert.rejects(() => client.getHome(), /登录已失效/);
+  assert.equal(fallbackCalled, false);
+});
+
 test("network failure rejects by default even when a demo fallback exists", async () => {
   let fallbackCalled = false;
   const client = createApiClient({
@@ -152,7 +187,7 @@ test("network failure rejects by default even when a demo fallback exists", asyn
   assert.equal(fallbackCalled, false);
 });
 
-test("network failure uses demo fallback only when local demo mode is explicit", async () => {
+test("HTTP mode never falls back even when a caller asks to enable fallback", async () => {
   let fallbackCalled = false;
   const client = createApiClient({
     baseUrl: "http://localhost:8080/api/v1",
@@ -168,10 +203,8 @@ test("network failure uses demo fallback only when local demo mode is explicit",
     }
   });
 
-  const data = await client.getHome();
-
-  assert.deepEqual(data, { hotel: { name: "demo" } });
-  assert.equal(fallbackCalled, true);
+  await assert.rejects(() => client.getHome(), /request:fail timeout/);
+  assert.equal(fallbackCalled, false);
 });
 
 test("local demo mode can bypass HTTP requests entirely", async () => {
