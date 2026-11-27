@@ -11,8 +11,11 @@ import (
 )
 
 func main() {
-	fromJSON := flag.String("from-json", "", "import an existing JSON demo directory into an empty MySQL database")
+	fromJSON := flag.String("from-json", "", "removed: demo data cannot be imported into MySQL")
 	flag.Parse()
+	if *fromJSON != "" {
+		log.Fatal("demo data cannot be imported into MySQL")
+	}
 	repo, err := app.OpenMySQL(os.Getenv("MYSQL_DSN"))
 	if err != nil {
 		log.Fatal(err)
@@ -22,11 +25,6 @@ func main() {
 	defer cancel()
 	if err := app.MigrateMySQL(ctx, repo.DB); err != nil {
 		log.Fatal(err)
-	}
-	if *fromJSON != "" {
-		if err := app.ImportJSONToMySQL(*fromJSON, repo); err != nil {
-			log.Fatal(err)
-		}
 	}
 	log.Print("MySQL migration complete")
 }

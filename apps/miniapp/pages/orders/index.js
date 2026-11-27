@@ -2,6 +2,7 @@ const { money } = require("../../utils/format");
 
 const STATUS_TEXT = {
   pending_confirm: "待前台确认",
+  booked: "待前台确认",
   confirmed: "已确认",
   checked_in: "已入住",
   checked_out: "已离店",
@@ -40,7 +41,8 @@ Page({
       const orders = (data.items || []).map((order) => ({
         ...order,
         statusText: order.status_text || STATUS_TEXT[order.status] || order.status,
-        amountText: money(order.actual_amount_cent || order.estimated_amount_cent)
+        amountText: money(order.amount_due_cent ?? order.actual_amount_cent ?? order.estimated_amount_cent ?? 0),
+        roomName: order.booking_snapshot ? order.booking_snapshot.room_name : order.room_type
       }));
 
       this.setData({

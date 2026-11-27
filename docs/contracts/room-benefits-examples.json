@@ -1,0 +1,18 @@
+{
+  "contract_version": "0.4.0-draft",
+  "environment": "isolated-test",
+  "cases": {
+    "capabilities_off": { "code": 0, "message": "ok", "data": { "configured_booking": false, "campaign_issue": false, "configured_join": false } },
+    "inventory_inherits_default": { "code": 0, "message": "ok", "data": { "items": [{ "stay_date": "2026-12-01", "sellable_quantity": null, "effective_quantity": 1, "reserved_quantity": 0, "closed": false }], "version": 1 } },
+    "quote_request": { "rate_id": "rate_standard", "checkin_date": "2026-12-01", "checkout_date": "2026-12-03", "selected_benefits": [{ "grant_id": "grant_coupon10" }, { "grant_id": "grant_credit5", "amount_cent": 500 }, { "grant_id": "grant_water" }] },
+    "quote_success": { "code": 0, "message": "ok", "data": { "quote": { "id": "quote_1", "expires_at": "2026-12-01T02:10:00Z", "room_type_id": "room_standard", "room_name": "标准大床房", "rate_id": "rate_standard", "checkin_date": "2026-12-01", "checkout_date": "2026-12-03", "night_count": 2, "nightly_cent": 7900, "room_total_cent": 15800, "usable_benefits": [], "selected_benefits": ["grant_coupon10", "grant_credit5", "grant_water"], "deductions": [{ "grant_id": "grant_coupon10", "amount_cent": 1000 }, { "grant_id": "grant_credit5", "amount_cent": 500 }], "fulfillment_items": [{ "grant_id": "grant_water", "item_name": "矿泉水", "quantity": 1 }], "potential_rewards": [], "amount_due_cent": 14300 } } },
+    "submit_request": { "quote_id": "quote_1", "arrival_time": "18:00", "contact_name": "测试住客", "phone": "13800138001" },
+    "sold_out": { "code": 40900, "message": "请重新选择房型", "data": { "reason": "ROOM_SOLD_OUT" } },
+    "feature_disabled": { "code": 40900, "message": "暂不可用", "data": { "reason": "FEATURE_DISABLED" } },
+    "legacy_booking_blocked_in_production": { "route": "POST /bookings", "http_status": 409, "response": { "code": 40900, "message": "请使用新订房流程", "data": { "reason": "FEATURE_DISABLED" } } },
+    "legacy_join_blocked_in_production": { "route": "POST /members/join", "http_status": 409, "response": { "code": 40900, "message": "请使用新入会流程", "data": { "reason": "FEATURE_DISABLED" } } },
+    "stale_version": { "code": 40900, "message": "配置已更新", "data": { "reason": "STALE_VERSION", "current_version": 3 } },
+    "entitlement_none": { "code": 0, "message": "ok", "data": { "entitlement": null } },
+    "claim_request": { "entitlement_id": "ent_1", "campaign_ids": ["camp_new10"] }
+  }
+}

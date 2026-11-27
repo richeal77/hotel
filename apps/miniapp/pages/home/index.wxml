@@ -40,7 +40,7 @@
   </view>
 
   <view class="section action-grid">
-    <view class="action-item" bindtap="goPage" data-url="/pages/booking/index">
+    <view class="action-item" wx:if="{{bookingEnabled}}" bindtap="goPage" data-url="/pages/booking/index">
       <text class="action-title">订房</text>
       <text class="action-meta">提交到店入住意向</text>
     </view>

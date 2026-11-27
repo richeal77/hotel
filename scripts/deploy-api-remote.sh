@@ -20,7 +20,7 @@ port=8082
 addr='0.0.0.0:8082'
 if [[ $mode == production ]]; then
   port=8081
-  addr='127.0.0.1:8081'
+  addr='0.0.0.0:8081'
 fi
 
 command -v flock >/dev/null 2>&1 || fail 'ECS 缺少 flock 命令（安装 util-linux 后重试）'
@@ -58,26 +58,22 @@ chown "$run_user" "$data_root/$mode"
 chmod 750 "$data_root/$mode"
 
 env_file="$env_root/$mode.env"
-if [[ $mode == test && ! -f $env_file ]]; then
-  cat >"$env_file" <<EOF
-APP_ENV=local-demo
-API_ADDR=$addr
-API_DATA_DIR=$data_root/$mode
-EOF
-  chmod 600 "$env_file"
-fi
-[[ -f $env_file ]] || fail "缺少 ${env_file}；先配置生产数据库和微信凭据"
+[[ -f $env_file ]] || fail "缺少 ${env_file}；先配置该环境的 MySQL 和微信凭据"
 env_mode=$(stat -c %a "$env_file" 2>/dev/null || stat -f %Lp "$env_file" 2>/dev/null)
 [[ $env_mode == 600 ]] || fail "$env_file 权限必须是 600"
 grep -Fxq "API_ADDR=$addr" "$env_file" || fail "$env_file 必须设置 API_ADDR=$addr"
 if [[ $mode == production ]]; then
   grep -Fxq 'APP_ENV=production' "$env_file" || fail "$env_file 必须设置 APP_ENV=production"
-  for key in MYSQL_DSN WECHAT_APP_ID WECHAT_APP_SECRET; do
-    grep -Eq "^${key}=.+$" "$env_file" || fail "$env_file 缺少 $key"
-  done
+  db_name=hotel_prod
 else
-  grep -Eq '^APP_ENV=(local-demo|integration)$' "$env_file" || fail "$env_file 只允许 APP_ENV=local-demo 或 integration"
+  grep -Fxq 'APP_ENV=integration' "$env_file" || fail "$env_file 必须设置 APP_ENV=integration"
+  db_name=hotel_prod_test
 fi
+for key in MYSQL_DSN WECHAT_APP_ID WECHAT_APP_SECRET; do
+  grep -Eq "^${key}=.+$" "$env_file" || fail "$env_file 缺少 $key"
+done
+grep -Eq "^MYSQL_DSN=[^[:space:]]+/${db_name}([?][^[:space:]]+)?$" "$env_file" ||
+  fail "$env_file 的 MYSQL_DSN 必须连接数据库 $db_name"
 
 release_dir="$opt_root/$mode/releases/$release_id"
 [[ ! -e $release_dir ]] || fail "版本 $release_id 已存在"
@@ -155,11 +151,9 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
 done
 [[ $ready == true ]] || rollback
 
-if [[ $mode == production ]]; then
-  mock_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 \
-    -H 'Content-Type: application/json' -d '{}' \
-    "http://127.0.0.1:$port/api/v1/auth/mock-login" 2>/dev/null) || mock_status=000
-  [[ $mock_status == 404 ]] || rollback
-fi
+mock_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 \
+  -H 'Content-Type: application/json' -d '{}' \
+  "http://127.0.0.1:$port/api/v1/auth/mock-login" 2>/dev/null) || mock_status=000
+[[ $mock_status == 404 ]] || rollback
 
 printf 'ECS 服务已启动：%s，版本 %s，本机端口 %s\n' "$service" "$release_id" "$port"

@@ -23,17 +23,21 @@ check_failure() {
 check_failure 'missing mode' '必须指定 --mode' --address 39.105.122.224:8082 --dry-run
 check_failure 'invalid mode' '模式只能是 test 或 production' --mode qa --address 39.105.122.224:8082 --dry-run
 check_failure 'mismatched test port' '测试模式的 IP 地址必须使用 8082' --mode test --address 39.105.122.224:8081 --dry-run
-check_failure 'production requires domain' '线上模式必须使用 HTTPS 域名' --mode production --address 39.105.122.224:8081 --dry-run
+check_failure 'mismatched production port' '线上模式的 IP 地址必须使用 8081' --mode production --address 39.105.122.224:8082 --dry-run
 check_failure 'invalid address' '地址格式错误' --mode test --address 'bad host' --dry-run
 check_failure 'invalid IPv4' 'IP 地址中的数字必须在 0 到 255 之间' --mode test --address 999.105.122.224:8082 --dry-run
 
 "$script" --mode test --address 39.105.122.224:8082 --dry-run >"$tmp_dir/out"
 grep -Fq '源码：当前工作区（含未提交改动）' "$tmp_dir/out"
+grep -Fq '数据库：hotel_prod_test' "$tmp_dir/out"
 grep -Fq '访问：http://39.105.122.224:8082/api/v1' "$tmp_dir/out"
 
 "$script" --mode production --address api.example.com --dry-run >"$tmp_dir/out"
-grep -Fq '源码：GitHub origin/main' "$tmp_dir/out"
+grep -Fq '源码：本地 main 已提交版本' "$tmp_dir/out"
+grep -Fq '数据库：hotel_prod' "$tmp_dir/out"
 grep -Fq '访问：https://api.example.com/api/v1' "$tmp_dir/out"
+"$script" --mode production --address 39.105.122.224:8081 --dry-run >"$tmp_dir/out"
+grep -Fq '访问：http://39.105.122.224:8081/api/v1' "$tmp_dir/out"
 
 echo 'deploy-api CLI tests passed'
 
@@ -58,18 +62,19 @@ test ! -e "$tmp_dir/ssh-called"
 cat >"$tmp_dir/build-fail-bin/git" <<'EOF'
 #!/usr/bin/env bash
 for arg in "$@"; do
-  if [[ $arg == fetch ]]; then exit 0; fi
+  if [[ $arg == fetch ]]; then touch "$FETCH_CALLED_MARKER"; exit 1; fi
 done
 exec "$REAL_GIT" "$@"
 EOF
 chmod +x "$tmp_dir/build-fail-bin/git"
 real_git=$(command -v git)
 if PATH="$tmp_dir/build-fail-bin:$PATH" REAL_GIT="$real_git" \
-    SSH_CALLED_MARKER="$tmp_dir/ssh-called" "$script" --mode production --address api.example.com >"$tmp_dir/out" 2>&1; then
-  echo 'FAIL demo-only origin/main was accepted as production' >&2
+    SSH_CALLED_MARKER="$tmp_dir/ssh-called" FETCH_CALLED_MARKER="$tmp_dir/fetch-called" "$script" --mode production --address api.example.com >"$tmp_dir/out" 2>&1; then
+  echo 'FAIL rejected Go tests did not stop production deployment' >&2
   exit 1
 fi
-grep -Fq 'GitHub main 尚不支持 APP_ENV=production' "$tmp_dir/out"
+grep -Fq '正在测试 Go 后端' "$tmp_dir/out"
+test ! -e "$tmp_dir/fetch-called"
 test ! -e "$tmp_dir/ssh-called"
 
 remote_script="$repo_dir/scripts/deploy-api-remote.sh"
@@ -115,9 +120,50 @@ export HOTEL_API_SYSTEMD_ROOT="$tmp_dir/systemd"
 export HOTEL_API_RUN_USER="$(id -un)"
 
 printf 'binary-v1' > "$tmp_dir/staged-v1"
+if bash "$remote_script" test missing-env "$tmp_dir/staged-v1" >"$tmp_dir/out" 2>&1; then
+  echo 'FAIL test deployment accepted missing MySQL configuration' >&2
+  exit 1
+fi
+grep -Fq '缺少' "$tmp_dir/out"
+cat >"$tmp_dir/etc/test.env" <<'EOF'
+APP_ENV=integration
+API_ADDR=0.0.0.0:8082
+MYSQL_DSN=hotel_api:test-only@tcp(127.0.0.1:3306)/hotel_prod_test?parseTime=true
+WECHAT_APP_ID=test-only
+WECHAT_APP_SECRET=test-only
+EOF
+chmod 600 "$tmp_dir/etc/test.env"
 bash "$remote_script" test test-v1 "$tmp_dir/staged-v1" >"$tmp_dir/out"
 test "$(readlink "$tmp_dir/opt/test/current")" = "$tmp_dir/opt/test/releases/test-v1"
 grep -Fq -- '-n' "$FLOCK_LOG"
+
+sed 's/APP_ENV=integration/APP_ENV=local-demo/' "$tmp_dir/etc/test.env" >"$tmp_dir/test-bad.env"
+cp "$tmp_dir/test-bad.env" "$tmp_dir/etc/test.env"
+printf 'wrong-mode' > "$tmp_dir/wrong-mode-staged"
+if bash "$remote_script" test wrong-mode "$tmp_dir/wrong-mode-staged" >"$tmp_dir/out" 2>&1; then
+  echo 'FAIL test deployment accepted demo mode' >&2
+  exit 1
+fi
+grep -Fq 'APP_ENV=integration' "$tmp_dir/out"
+sed 's/APP_ENV=local-demo/APP_ENV=integration/' "$tmp_dir/etc/test.env" >"$tmp_dir/test-good.env"
+cp "$tmp_dir/test-good.env" "$tmp_dir/etc/test.env"
+sed 's@/hotel_prod_test?@/hotel_prod?@' "$tmp_dir/etc/test.env" >"$tmp_dir/test-bad.env"
+cp "$tmp_dir/test-bad.env" "$tmp_dir/etc/test.env"
+printf 'wrong-db' > "$tmp_dir/wrong-db-staged"
+if bash "$remote_script" test wrong-db "$tmp_dir/wrong-db-staged" >"$tmp_dir/out" 2>&1; then
+  echo 'FAIL test deployment accepted production database' >&2
+  exit 1
+fi
+grep -Fq 'hotel_prod_test' "$tmp_dir/out"
+sed 's@/hotel_prod?@/hotel_prod_test?@' "$tmp_dir/etc/test.env" >"$tmp_dir/test-good.env"
+cp "$tmp_dir/test-good.env" "$tmp_dir/etc/test.env"
+
+printf 'mock-test' > "$tmp_dir/mock-test-staged"
+if MOCK_STATUS=400 bash "$remote_script" test mock-test "$tmp_dir/mock-test-staged" >"$tmp_dir/out" 2>&1; then
+  echo 'FAIL demo authentication was accepted in test' >&2
+  exit 1
+fi
+test "$(readlink "$tmp_dir/opt/test/current")" = "$tmp_dir/opt/test/releases/test-v1"
 
 printf 'foreign-v1' > "$tmp_dir/foreign-staged-v1"
 if FOREIGN_LISTENER=1 bash "$remote_script" test foreign-v1 "$tmp_dir/foreign-staged-v1" >"$tmp_dir/out" 2>&1; then
@@ -145,8 +191,8 @@ test "$(readlink "$tmp_dir/opt/test/current")" = "$tmp_dir/opt/test/releases/tes
 
 cat >"$tmp_dir/etc/production.env" <<'EOF'
 APP_ENV=production
-API_ADDR=127.0.0.1:8081
-MYSQL_DSN=test-only
+API_ADDR=0.0.0.0:8081
+MYSQL_DSN=hotel_api:test-only@tcp(127.0.0.1:3306)/hotel_prod?parseTime=true
 WECHAT_APP_ID=test-only
 WECHAT_APP_SECRET=test-only
 EOF

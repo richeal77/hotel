@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Gaobeidian Shangkeyou Miniapp API
-  version: 0.3.0
-  description: Local demo and MySQL-backed integration authentication contract. SMS delivery outside local-demo remains planned.
+  version: 0.4.0-draft
+  description: Phase 3 room pricing and benefits draft contract. New operations are planned, not implemented. SMS delivery outside local-demo remains planned.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local demo on development computer
@@ -191,7 +191,9 @@ paths:
   /members/join:
     post:
       tags: [Miniapp]
-      summary: Join membership
+      summary: Local-demo legacy membership join
+      description: Local JSON demo only. Integration and production reject this legacy gift-issuing write with 409 FEATURE_DISABLED; use /members/configured-join when CONFIGURED_JOIN_ENABLED is on. Turning that switch off never re-enables this route.
+      x-environments: [local-demo]
       security:
         - memberBearerAuth: []
       requestBody:
@@ -220,6 +222,7 @@ paths:
                             type: array
                             items:
                               $ref: "#/components/schemas/CouponSummary"
+        "409": { $ref: "#/components/responses/BusinessConflict" }
   /mini/home:
     get:
       tags: [Miniapp]
@@ -310,7 +313,9 @@ paths:
   /bookings:
     post:
       tags: [Miniapp]
-      summary: Submit booking intent
+      summary: Local-demo legacy booking intent
+      description: Local JSON demo only. Integration and production reject this legacy fixed-price write with 409 FEATURE_DISABLED; use quote plus /bookings/configured when CONFIGURED_BOOKING_ENABLED is on. Turning that switch off never re-enables this route.
+      x-environments: [local-demo]
       security:
         - memberBearerAuth: []
       requestBody:
@@ -335,10 +340,12 @@ paths:
                         properties:
                           order:
                             $ref: "#/components/schemas/BookingOrderSummary"
+        "409": { $ref: "#/components/responses/BusinessConflict" }
   /bookings/my:
     get:
       tags: [Miniapp]
       summary: Current member bookings
+      description: Local-demo returns legacy BookingOrder items; integration and production return only ConfiguredOrder items. Demo seed orders are never imported into production.
       security:
         - memberBearerAuth: []
       responses:
@@ -358,7 +365,9 @@ paths:
                           items:
                             type: array
                             items:
-                              $ref: "#/components/schemas/BookingOrder"
+                              oneOf:
+                                - $ref: "#/components/schemas/BookingOrder"
+                                - $ref: "#/components/schemas/ConfiguredOrder"
   /referrals/me:
     get:
       tags: [Miniapp]
@@ -484,10 +493,13 @@ paths:
     get:
       tags: [Admin]
       summary: Admin booking list
+      description: Local-demo uses legacy statuses and BookingOrder items; integration and production use booked/checked_in/cancelled/no_show and ConfiguredOrder items only. Closing new booking does not block processing already submitted configured orders.
       security:
         - staffBearerAuth: []
       parameters:
-        - $ref: "#/components/parameters/BookingStatusQuery"
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending_confirm, confirmed, booked, checked_in, checked_out, cancelled, no_show] }
         - $ref: "#/components/parameters/PageQuery"
         - $ref: "#/components/parameters/PageSizeQuery"
       responses:
@@ -508,11 +520,15 @@ paths:
                               items:
                                 type: array
                                 items:
-                                  $ref: "#/components/schemas/BookingOrder"
+                                  oneOf:
+                                    - $ref: "#/components/schemas/BookingOrder"
+                                    - $ref: "#/components/schemas/ConfiguredOrder"
   /admin/bookings/{order_id}/status:
     patch:
       tags: [Admin]
-      summary: Update booking status
+      summary: Update local-demo booking status
+      description: Local JSON demo only. Integration and production reject this legacy status writer with 409 FEATURE_DISABLED; configured orders use /admin/bookings/{id}/configured-status.
+      x-environments: [local-demo]
       security:
         - staffBearerAuth: []
       parameters:
@@ -539,6 +555,7 @@ paths:
                         properties:
                           order:
                             $ref: "#/components/schemas/BookingOrder"
+        "409": { $ref: "#/components/responses/BusinessConflict" }
   /admin/members:
     get:
       tags: [Admin]
@@ -843,7 +860,412 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/DemoState"
+  /mini/capabilities:
+    get:
+      tags: [Miniapp]
+      summary: Published feature switches
+      security: []
+      x-implementation-status: planned
+      responses:
+        "200": { $ref: "#/components/responses/CapabilitiesOK" }
+  /mini/room-types:
+    get:
+      tags: [Miniapp]
+      summary: Available rooms and rates for a stay
+      security: []
+      x-implementation-status: planned
+      parameters:
+        - { name: checkin_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: checkout_date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { $ref: "#/components/responses/RoomSearchOK" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /bookings/quotes:
+    post:
+      tags: [Miniapp]
+      summary: Create a single-use room quote
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateQuoteRequest" } } } }
+      responses:
+        "200": { description: Quote, content: { application/json: { schema: { $ref: "#/components/schemas/QuoteResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /bookings/configured:
+    post:
+      tags: [Miniapp]
+      summary: Book one room using a quote; verified member phone required
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SubmitConfiguredBooking" } } } }
+      responses:
+        "200": { description: Booked order, content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguredOrderResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /bookings/{id}/cancel:
+    post:
+      tags: [Miniapp]
+      summary: Cancel own booked order and release nightly holds
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false } } } }
+      responses:
+        "200": { description: Cancelled order or idempotent result, content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguredOrderResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/room-types:
+    get:
+      tags: [Admin]
+      summary: List room types
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: status, in: query, schema: { $ref: "#/components/schemas/PublishStatus" } }, { name: q, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Room page, content: { application/json: { schema: { $ref: "#/components/schemas/RoomPageResponse" } } } }
+    post:
+      tags: [Admin]
+      summary: Create draft room type
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RoomWrite" } } } }
+      responses:
+        "200": { description: Draft room, content: { application/json: { schema: { $ref: "#/components/schemas/RoomResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+  /admin/room-types/{id}:
+    patch:
+      tags: [Admin]
+      summary: Versioned room update
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RoomPatch" } } } }
+      responses:
+        "200": { description: Room, content: { application/json: { schema: { $ref: "#/components/schemas/RoomResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/room-types/{id}/rates:
+    get:
+      tags: [Admin]
+      summary: List room rates
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }]
+      responses:
+        "200": { description: Rates, content: { application/json: { schema: { $ref: "#/components/schemas/RateListResponse" } } } }
+    post:
+      tags: [Admin]
+      summary: Create draft rate
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RateWrite" } } } }
+      responses:
+        "200": { description: Rate, content: { application/json: { schema: { $ref: "#/components/schemas/RateResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+  /admin/room-rates/{id}:
+    patch:
+      tags: [Admin]
+      summary: Versioned rate update
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RatePatch" } } } }
+      responses:
+        "200": { description: Rate, content: { application/json: { schema: { $ref: "#/components/schemas/RateResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/room-types/{id}/inventory:
+    get:
+      tags: [Admin]
+      summary: Daily inventory, with null override meaning inherit default
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/FromDate" }, { $ref: "#/components/parameters/ToDate" }]
+      responses:
+        "200": { description: Inventory, content: { application/json: { schema: { $ref: "#/components/schemas/InventoryResponse" } } } }
+    put:
+      tags: [Admin]
+      summary: Versioned daily inventory update
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/InventoryWrite" } } } }
+      responses:
+        "200": { description: Inventory, content: { application/json: { schema: { $ref: "#/components/schemas/InventoryResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/bookings/{id}/configured-status:
+    patch:
+      tags: [Admin]
+      summary: Check in and atomically redeem holds and issue selected gifts
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CheckinRequest" } } } }
+      responses:
+        "200": { description: Check-in result, content: { application/json: { schema: { $ref: "#/components/schemas/CheckinResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/bookings/{id}:
+    get:
+      tags: [Admin]
+      summary: Configured booking detail and history
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }]
+      responses:
+        "200": { description: Detail, content: { application/json: { schema: { $ref: "#/components/schemas/BookingDetailResponse" } } } }
+  /admin/bookings/{id}/benefit-options:
+    get:
+      tags: [Admin]
+      summary: Eligible check-in gifts and due amount
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }]
+      responses:
+        "200": { description: Benefit options, content: { application/json: { schema: { $ref: "#/components/schemas/BenefitOptionsResponse" } } } }
+  /admin/new-member-gift-policy:
+    get:
+      tags: [Admin]
+      summary: Current gift eligibility policy
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      responses:
+        "200": { description: Policy, content: { application/json: { schema: { $ref: "#/components/schemas/GiftPolicyResponse" } } } }
+    put:
+      tags: [Admin]
+      summary: Versioned gift policy update
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GiftPolicy" } } } }
+      responses:
+        "200": { description: Policy, content: { application/json: { schema: { $ref: "#/components/schemas/GiftPolicyResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/campaigns:
+    get:
+      tags: [Admin]
+      summary: Search campaigns
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: kind, in: query, schema: { $ref: "#/components/schemas/BenefitKind" } }, { name: trigger, in: query, schema: { type: string } }, { name: status, in: query, schema: { type: string } }, { name: q, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Campaign page, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignPageResponse" } } } }
+    post:
+      tags: [Admin]
+      summary: Create draft campaign
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignRule" } } } }
+      responses:
+        "200": { description: Campaign, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+  /admin/campaigns/{id}:
+    get:
+      tags: [Admin]
+      summary: Campaign detail
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }]
+      responses:
+        "200": { description: Campaign, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignResponse" } } } }
+    patch:
+      tags: [Admin]
+      summary: Create immutable campaign rule version
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [version, rule], properties: { version: { type: integer }, rule: { $ref: "#/components/schemas/CampaignRule" } } } } } }
+      responses:
+        "200": { description: Campaign, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/campaigns/{id}/state:
+    post:
+      tags: [Admin]
+      summary: Activate or pause campaign
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [version, status], properties: { version: { type: integer }, status: { type: string, enum: [active, paused] } } } } } }
+      responses:
+        "200": { description: Campaign, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/campaigns/{id}/versions:
+    get:
+      tags: [Admin]
+      summary: Immutable rule history
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ResourceId" }, { $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }]
+      responses:
+        "200": { description: Rule versions, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignVersionPageResponse" } } } }
+  /mini/campaigns:
+    get:
+      tags: [Miniapp]
+      summary: Available campaign summaries and eligibility
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: kind, in: query, schema: { $ref: "#/components/schemas/BenefitKind" } }, { name: trigger, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Campaigns, content: { application/json: { schema: { $ref: "#/components/schemas/CampaignPageResponse" } } } }
+  /members/configured-join:
+    post:
+      tags: [Miniapp]
+      summary: Register and create one-time gift entitlement, without auto-claim
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguredJoinRequest" } } } }
+      responses:
+        "200": { description: Joined member, content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguredJoinResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /mini/referral-code:
+    get:
+      tags: [Miniapp]
+      summary: Current member referral code
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      responses:
+        "200": { description: Code, content: { application/json: { schema: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [referral_code], properties: { referral_code: { type: string } } } } } } } }
+  /mini/new-member-entitlement:
+    get:
+      tags: [Miniapp]
+      summary: Current gift entitlement; null when none
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      responses:
+        "200": { description: Entitlement, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementResponse" } } } }
+  /mini/new-member-entitlement/claim:
+    post:
+      tags: [Miniapp]
+      summary: Claim selected gifts once
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [entitlement_id, campaign_ids], properties: { entitlement_id: { type: string }, campaign_ids: { type: array, minItems: 1, uniqueItems: true, items: { type: string } } } } } } }
+      responses:
+        "200": { description: Claimed gifts, content: { application/json: { schema: { $ref: "#/components/schemas/ClaimResponse" } } } }
+        "409": { $ref: "#/components/responses/BusinessConflict" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /mini/benefits:
+    get:
+      tags: [Miniapp]
+      summary: Own issued benefits
+      x-implementation-status: planned
+      security: [{ memberBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: kind, in: query, schema: { $ref: "#/components/schemas/BenefitKind" } }, { name: state, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Benefits, content: { application/json: { schema: { $ref: "#/components/schemas/GrantPageResponse" } } } }
+  /admin/benefits:
+    get:
+      tags: [Admin]
+      summary: Issued benefits ledger
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: member_id, in: query, schema: { type: string } }, { name: order_id, in: query, schema: { type: string } }, { name: campaign_id, in: query, schema: { type: string } }, { name: kind, in: query, schema: { $ref: "#/components/schemas/BenefitKind" } }, { name: state, in: query, schema: { type: string } }, { $ref: "#/components/parameters/FromDate" }, { $ref: "#/components/parameters/ToDate" }]
+      responses:
+        "200": { description: Benefits, content: { application/json: { schema: { $ref: "#/components/schemas/GrantPageResponse" } } } }
+  /admin/benefit-events:
+    get:
+      tags: [Admin]
+      summary: Benefit event ledger
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { name: member_id, in: query, schema: { type: string } }, { name: order_id, in: query, schema: { type: string } }, { name: campaign_id, in: query, schema: { type: string } }, { name: kind, in: query, schema: { $ref: "#/components/schemas/BenefitKind" } }, { name: action, in: query, schema: { type: string } }, { $ref: "#/components/parameters/FromDate" }, { $ref: "#/components/parameters/ToDate" }]
+      responses:
+        "200": { description: Events, content: { application/json: { schema: { $ref: "#/components/schemas/EventPageResponse" } } } }
+  /admin/benefit-events/export:
+    get:
+      tags: [Admin]
+      summary: Export up to 31 days and 10000 benefit events as UTF-8 CSV
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ name: from, in: query, required: true, schema: { type: string, format: date } }, { name: to, in: query, required: true, schema: { type: string, format: date } }]
+      responses:
+        "200": { description: UTF-8 CSV, content: { text/csv: { schema: { type: string, format: binary } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /admin/bookings/export:
+    get:
+      tags: [Admin]
+      summary: Export up to 31 days and 10000 bookings as UTF-8 CSV
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ name: from, in: query, required: true, schema: { type: string, format: date } }, { name: to, in: query, required: true, schema: { type: string, format: date } }, { name: status, in: query, schema: { type: string } }, { name: room_type_id, in: query, schema: { type: string } }, { name: order_id, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: UTF-8 CSV with masked phone, content: { text/csv: { schema: { type: string, format: binary } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /admin/registration-referrals:
+    get:
+      tags: [Admin]
+      summary: Registration referral ledger
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { $ref: "#/components/parameters/FromDate" }, { $ref: "#/components/parameters/ToDate" }, { name: referrer_member_id, in: query, schema: { type: string } }, { name: referred_member_id, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Referrals, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationReferralPageResponse" } } } }
+  /admin/operation-audit-logs:
+    get:
+      tags: [Admin]
+      summary: Full read/write operation audit; this read is itself logged
+      x-implementation-status: planned
+      security: [{ staffBearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }, { $ref: "#/components/parameters/FromDate" }, { $ref: "#/components/parameters/ToDate" }, { name: username, in: query, schema: { type: string } }, { name: client_ip, in: query, schema: { type: string } }, { name: action, in: query, schema: { type: string } }, { name: outcome, in: query, schema: { type: string, enum: [success, rejected, failed, replayed] } }, { name: target_type, in: query, schema: { type: string } }, { name: target_id, in: query, schema: { type: string } }, { name: request_id, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: Audit page, content: { application/json: { schema: { $ref: "#/components/schemas/OperationAuditPageResponse" } } } }
+        "503": { $ref: "#/components/responses/AuditUnavailable" }
 components:
+  responses:
+    ValidationError: { description: Field validation failed, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 40000, message: Invalid request, data: { reason: VALIDATION_ERROR, field_errors: [{ field: checkin_date, message: Required }] } } } } }
+    Unauthenticated: { description: Missing or expired member/staff session, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 40100, message: Login required, data: { reason: UNAUTHENTICATED } } } } }
+    Forbidden: { description: Authenticated actor cannot perform this operation, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 40300, message: Forbidden, data: { reason: FORBIDDEN } } } } }
+    NotFound: { description: Resource not found or not owned by caller, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 40400, message: Not found, data: { reason: NOT_FOUND } } } } }
+    BusinessConflict: { description: State or version conflict, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 40900, message: Refresh and retry, data: { reason: ROOM_SOLD_OUT } } } } }
+    AuditUnavailable: { description: Candidate D7 policy only; production decision pending, content: { application/json: { schema: { $ref: "#/components/schemas/Phase3Error" }, example: { code: 50300, message: Audit unavailable, data: { reason: AUDIT_UNAVAILABLE } } } } }
+    CapabilitiesOK: { description: Switches visible to the client, content: { application/json: { schema: { $ref: "#/components/schemas/CapabilitiesResponse" }, example: { code: 0, message: ok, data: { configured_booking: false, campaign_issue: false, configured_join: false } } } } }
+    RoomSearchOK: { description: Available rooms, content: { application/json: { schema: { $ref: "#/components/schemas/RoomSearchResponse" } } } }
   securitySchemes:
     memberBearerAuth:
       type: http
@@ -854,6 +1276,12 @@ components:
       scheme: bearer
       description: Opaque, revocable session token in integration and production; mock token in local-demo.
   parameters:
+    ResourceId: { name: id, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid }, description: Same actor, operation and normalized body replay the original response for seven days. }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    FromDate: { name: from, in: query, required: false, schema: { type: string, format: date } }
+    ToDate: { name: to, in: query, required: false, schema: { type: string, format: date } }
     PageQuery:
       name: page
       in: query
@@ -1638,6 +2066,169 @@ components:
         created_at:
           type: string
           format: date-time
+    Phase3Error:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { type: integer, enum: [40000, 40100, 40300, 40400, 40900, 50300] }
+        message: { type: string }
+        data:
+          type: object
+          required: [reason]
+          properties:
+            reason: { type: string, enum: [VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, STALE_VERSION, QUOTE_CHANGED, QUOTE_EXPIRED, ROOM_CLOSED, ROOM_SOLD_OUT, ALREADY_GRANTED, ENTITLEMENT_EXPIRED, INELIGIBLE, ISSUE_LIMIT_REACHED, BENEFIT_UNAVAILABLE, INVALID_TRANSITION, IDEMPOTENCY_CONFLICT, FEATURE_DISABLED, AUDIT_UNAVAILABLE] }
+            current_version: { type: integer, description: Present only for STALE_VERSION. }
+            field_errors: { type: array, items: { type: object, required: [field, message], properties: { field: { type: string }, message: { type: string } } } }
+    CapabilitiesResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { type: integer, enum: [0] }
+        message: { type: string }
+        data: { type: object, required: [configured_booking, campaign_issue, configured_join], properties: { configured_booking: { type: boolean }, campaign_issue: { type: boolean }, configured_join: { type: boolean } } }
+    PublishStatus: { type: string, enum: [draft, active, inactive] }
+    BenefitKind: { type: string, enum: [discount_coupon, physical_gift, stay_credit] }
+    RoomDetails:
+      type: object
+      required: [photo_urls, beds, amenities]
+      properties:
+        photo_urls: { type: array, items: { type: string, format: uri } }
+        beds: { type: array, items: { type: object, required: [type, count], properties: { type: { type: string }, count: { type: integer, minimum: 1 }, width_cm: { type: integer, minimum: 1 } } } }
+        max_guests: { type: integer, minimum: 1 }
+        area_m2: { type: integer, minimum: 1 }
+        window: { type: string, enum: [yes, no, partial] }
+        amenities: { type: array, items: { type: string } }
+        notes: { type: string }
+    Room:
+      type: object
+      required: [id, name, sort_order, status, default_sellable_quantity, details, version, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 80 }
+        sort_order: { type: integer }
+        status: { $ref: "#/components/schemas/PublishStatus" }
+        default_sellable_quantity: { type: integer, minimum: 0 }
+        details: { $ref: "#/components/schemas/RoomDetails" }
+        version: { type: integer, minimum: 1 }
+        updated_at: { type: string, format: date-time }
+        active_rates: { type: array, items: { $ref: "#/components/schemas/Rate" } }
+    RoomWrite:
+      type: object
+      required: [name, sort_order, default_sellable_quantity, details]
+      properties: { name: { type: string, maxLength: 80 }, sort_order: { type: integer }, default_sellable_quantity: { type: integer, minimum: 0 }, details: { $ref: "#/components/schemas/RoomDetails" } }
+    RoomPatch:
+      type: object
+      required: [version]
+      properties: { version: { type: integer }, name: { type: string }, sort_order: { type: integer }, default_sellable_quantity: { type: integer, minimum: 0 }, details: { $ref: "#/components/schemas/RoomDetails" }, status: { $ref: "#/components/schemas/PublishStatus" } }
+    Rate:
+      type: object
+      required: [id, room_type_id, name, status, base_nightly_cent, breakfast_count, cancellation_text, version, updated_at]
+      properties: { id: { type: string }, room_type_id: { type: string }, name: { type: string }, status: { $ref: "#/components/schemas/PublishStatus" }, base_nightly_cent: { type: integer, minimum: 0 }, breakfast_count: { type: integer, minimum: 0 }, cancellation_text: { type: string }, version: { type: integer }, updated_at: { type: string, format: date-time } }
+    RateWrite:
+      type: object
+      required: [name, base_nightly_cent, breakfast_count, cancellation_text]
+      properties: { name: { type: string }, base_nightly_cent: { type: integer, minimum: 0 }, breakfast_count: { type: integer, minimum: 0 }, cancellation_text: { type: string } }
+    RatePatch:
+      type: object
+      required: [version]
+      properties: { version: { type: integer }, name: { type: string }, base_nightly_cent: { type: integer, minimum: 0 }, breakfast_count: { type: integer, minimum: 0 }, cancellation_text: { type: string }, status: { $ref: "#/components/schemas/PublishStatus" } }
+    InventoryDay:
+      type: object
+      required: [stay_date, sellable_quantity, effective_quantity, reserved_quantity, closed]
+      properties:
+        stay_date: { type: string, format: date }
+        sellable_quantity: { type: integer, nullable: true, minimum: 0, description: "null inherits room default; zero explicitly closes capacity." }
+        effective_quantity: { type: integer, minimum: 0 }
+        reserved_quantity: { type: integer, minimum: 0 }
+        closed: { type: boolean }
+    InventoryWrite:
+      type: object
+      required: [version, from, to, items]
+      properties:
+        version: { type: integer }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        items: { type: array, items: { type: object, required: [stay_date, sellable_quantity, closed], properties: { stay_date: { type: string, format: date }, sellable_quantity: { type: integer, nullable: true, minimum: 0 }, closed: { type: boolean } } } }
+    RoomSearchResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { type: integer, enum: [0] }
+        message: { type: string }
+        data: { type: object, required: [configured_booking, items], properties: { configured_booking: { type: boolean }, items: { type: array, items: { type: object, required: [id, name, details, rates], properties: { id: { type: string }, name: { type: string }, details: { $ref: "#/components/schemas/RoomDetails" }, rates: { type: array, items: { type: object, required: [id, name, nightly_cent, max_available_rooms], properties: { id: { type: string }, name: { type: string }, nightly_cent: { type: integer }, max_available_rooms: { type: integer } } } } } } } } }
+    CreateQuoteRequest:
+      type: object
+      required: [rate_id, checkin_date, checkout_date]
+      additionalProperties: false
+      properties: { rate_id: { type: string }, checkin_date: { type: string, format: date }, checkout_date: { type: string, format: date }, selected_benefits: { type: array, items: { type: object, required: [grant_id], properties: { grant_id: { type: string }, amount_cent: { type: integer, minimum: 1 } } } } }
+    Quote:
+      type: object
+      required: [id, expires_at, room_type_id, room_name, rate_id, checkin_date, checkout_date, night_count, nightly_cent, room_total_cent, usable_benefits, selected_benefits, deductions, fulfillment_items, potential_rewards, amount_due_cent]
+      properties: { id: { type: string }, expires_at: { type: string, format: date-time }, room_type_id: { type: string }, room_name: { type: string }, rate_id: { type: string }, checkin_date: { type: string, format: date }, checkout_date: { type: string, format: date }, night_count: { type: integer, minimum: 1 }, nightly_cent: { type: integer }, room_total_cent: { type: integer }, usable_benefits: { type: array, items: { $ref: "#/components/schemas/Grant" } }, selected_benefits: { type: array, items: { type: string } }, deductions: { type: array, items: { type: object, required: [grant_id, amount_cent], properties: { grant_id: { type: string }, amount_cent: { type: integer } } } }, fulfillment_items: { type: array, items: { type: object, required: [grant_id, item_name, quantity], properties: { grant_id: { type: string }, item_name: { type: string }, quantity: { type: integer } } } }, potential_rewards: { type: array, items: { type: string } }, amount_due_cent: { type: integer, minimum: 0 } }
+    SubmitConfiguredBooking:
+      type: object
+      required: [quote_id, arrival_time, contact_name, phone]
+      properties: { quote_id: { type: string }, arrival_time: { type: string }, contact_name: { type: string }, phone: { type: string, description: Must match verified member phone. }, remark: { type: string } }
+    ConfiguredOrder:
+      type: object
+      required: [id, member_id, room_type_id, rate_id, quote_id, status, checkin_date, checkout_date, contact_name, phone, booking_snapshot, inventory_state, amount_due_cent]
+      properties: { id: { type: string }, member_id: { type: string }, room_type_id: { type: string }, rate_id: { type: string }, quote_id: { type: string }, status: { type: string, enum: [booked, checked_in, cancelled, no_show] }, checkin_date: { type: string, format: date }, checkout_date: { type: string, format: date }, contact_name: { type: string }, phone: { type: string, description: Full phone for owner; masked for staff list and export. }, booking_snapshot: { $ref: "#/components/schemas/Quote" }, inventory_state: { type: string, enum: [held, consumed, released] }, amount_due_cent: { type: integer, minimum: 0 } }
+    CheckinRequest:
+      type: object
+      required: [expected_status, status, selected_campaigns]
+      properties: { expected_status: { type: string, enum: [booked] }, status: { type: string, enum: [checked_in] }, selected_campaigns: { type: array, items: { type: object, required: [campaign_id, campaign_version], properties: { campaign_id: { type: string }, campaign_version: { type: integer } } } } }
+    RoomResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [room], properties: { room: { $ref: "#/components/schemas/Room" } } } } }
+    RoomPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { $ref: "#/components/schemas/Room" } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    RateResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [rate], properties: { rate: { $ref: "#/components/schemas/Rate" } } } } }
+    RateListResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Rate" } } } } } }
+    InventoryResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, version], properties: { items: { type: array, items: { $ref: "#/components/schemas/InventoryDay" } }, version: { type: integer } } } } }
+    QuoteResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [quote], properties: { quote: { $ref: "#/components/schemas/Quote" } } } } }
+    ConfiguredOrderResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [order], properties: { order: { $ref: "#/components/schemas/ConfiguredOrder" } } } } }
+    CheckinResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [order, issued_benefits, redeemed_benefits, skipped_campaigns], properties: { order: { $ref: "#/components/schemas/ConfiguredOrder" }, issued_benefits: { type: array, items: { $ref: "#/components/schemas/Grant" } }, redeemed_benefits: { type: array, items: { $ref: "#/components/schemas/BenefitEvent" } }, skipped_campaigns: { type: array, items: { type: object, required: [campaign_id, reason], properties: { campaign_id: { type: string }, reason: { type: string, enum: [ISSUE_LIMIT_REACHED] } } } } } } } }
+    BookingDetailResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [order, status_history], properties: { order: { $ref: "#/components/schemas/ConfiguredOrder" }, status_history: { type: array, items: { type: object, required: [status, occurred_at, actor_kind, actor_id], properties: { status: { type: string }, occurred_at: { type: string, format: date-time }, actor_kind: { type: string }, actor_id: { type: string } } } } } } } }
+    BenefitOptionsResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [eligible, issued, amount_due_cent, deductions, fulfillment_items], properties: { eligible: { type: array, items: { type: object, required: [campaign_id, campaign_version, name, kind, display_value], properties: { campaign_id: { type: string }, campaign_version: { type: integer }, name: { type: string }, kind: { $ref: "#/components/schemas/BenefitKind" }, display_value: { type: string } } } }, issued: { type: array, items: { $ref: "#/components/schemas/Grant" } }, amount_due_cent: { type: integer }, deductions: { type: array, items: { type: object } }, fulfillment_items: { type: array, items: { type: object } } } } } }
+    GiftPolicy: { type: object, required: [version, max_items, claim_window_days, campaign_ids], properties: { version: { type: integer }, max_items: { oneOf: [{ type: integer, minimum: 1 }, { type: string, enum: [all] }] }, claim_window_days: { type: integer, minimum: 1, default: 7 }, campaign_ids: { type: array, items: { type: string } } } }
+    GiftPolicyResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { $ref: "#/components/schemas/GiftPolicy" } } }
+    CampaignValidity:
+      oneOf:
+        - { type: object, required: [mode, expires_at], properties: { mode: { type: string, enum: [fixed] }, expires_at: { type: string, format: date-time } } }
+        - { type: object, required: [mode, days], properties: { mode: { type: string, enum: [relative_days] }, days: { type: integer, minimum: 1 } } }
+    CampaignRule:
+      type: object
+      required: [name, description, kind, trigger, group_key, issue_start_at, issue_end_at, validity, room_type_ids, payload]
+      properties:
+        name: { type: string, maxLength: 80 }
+        description: { type: string }
+        kind: { $ref: "#/components/schemas/BenefitKind" }
+        trigger: { type: string, enum: [new_member, checkin_gift, registration_referral, checkin_credit] }
+        recipient_side: { type: string, enum: [referrer, referred], description: Required for registration_referral only. }
+        group_key: { type: string, maxLength: 64 }
+        issue_start_at: { type: string, format: date-time }
+        issue_end_at: { type: string, format: date-time }
+        total_limit: { type: integer, minimum: 1, description: Omitted means unlimited; null is invalid. }
+        validity: { $ref: "#/components/schemas/CampaignValidity" }
+        min_room_amount_cent: { type: integer, minimum: 0 }
+        room_type_ids: { type: array, items: { type: string } }
+        payload: { type: object, description: "Coupon/credit {amount_cent}; physical gift {item_name,quantity,unit,instructions}." }
+    Campaign: { type: object, required: [id, version, status, rule, issued_count, updated_at], properties: { id: { type: string }, version: { type: integer }, status: { type: string, enum: [draft, active, paused] }, rule: { $ref: "#/components/schemas/CampaignRule" }, issued_count: { type: integer }, updated_at: { type: string, format: date-time } } }
+    CampaignResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [campaign], properties: { campaign: { $ref: "#/components/schemas/Campaign" } } } } }
+    CampaignPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { $ref: "#/components/schemas/Campaign" } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    CampaignVersionPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { type: object, required: [campaign_id, version, rule, created_at], properties: { campaign_id: { type: string }, version: { type: integer }, rule: { $ref: "#/components/schemas/CampaignRule" }, created_at: { type: string, format: date-time } } } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    Entitlement: { type: object, required: [id, max_items, claim_expires_at, claimed_at, eligible_campaign_ids, claimed_campaign_ids, status], properties: { id: { type: string }, max_items: { oneOf: [{ type: integer }, { type: string, enum: [all] }] }, claim_expires_at: { type: string, format: date-time }, claimed_at: { type: string, format: date-time, nullable: true }, eligible_campaign_ids: { type: array, items: { type: string } }, claimed_campaign_ids: { type: array, items: { type: string } }, status: { type: string, enum: [available, claimed, expired] } } }
+    Grant:
+      type: object
+      required: [id, member_id, campaign_id, campaign_version, source_order_id, kind, state, original_cent, remaining_cent, held_cent, original_quantity, remaining_quantity, available_at, expires_at, issued_at]
+      properties: { id: { type: string }, member_id: { type: string }, campaign_id: { type: string }, campaign_version: { type: integer }, source_order_id: { type: string, nullable: true }, kind: { $ref: "#/components/schemas/BenefitKind" }, state: { type: string, enum: [available, used, expired, revoked] }, original_cent: { type: integer, nullable: true }, remaining_cent: { type: integer, nullable: true }, held_cent: { type: integer }, original_quantity: { type: integer, nullable: true }, remaining_quantity: { type: integer, nullable: true }, available_at: { type: string, format: date-time }, expires_at: { type: string, format: date-time }, issued_at: { type: string, format: date-time }, campaign_name: { type: string }, payload: { type: object } }
+    BenefitEvent: { type: object, required: [id, grant_id, member_id, campaign_id, order_id, action, delta_cent, delta_quantity, operator_kind, operator_id, reason, created_at], properties: { id: { type: string }, grant_id: { type: string }, member_id: { type: string }, campaign_id: { type: string }, order_id: { type: string, nullable: true }, action: { type: string, enum: [issued, held, released, redeemed, expired, revoked, adjusted, review_required] }, delta_cent: { type: integer, nullable: true }, delta_quantity: { type: integer, nullable: true }, operator_kind: { type: string }, operator_id: { type: string }, reason: { type: string }, created_at: { type: string, format: date-time } } }
+    ConfiguredJoinRequest: { type: object, required: [nickname, phone, source, scene, accepted_privacy, accepted_member_rule], properties: { nickname: { type: string }, phone: { type: string }, source: { type: string }, scene: { type: string }, referrer_member_id: { type: string }, referral_code: { type: string }, accepted_privacy: { type: boolean, enum: [true] }, accepted_member_rule: { type: boolean, enum: [true] } }, description: "gift_choice is not accepted; phone must be verified server-side." }
+    ConfiguredJoinResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [member, issued_coupons, issued_benefits, new_member_entitlement], properties: { member: { $ref: "#/components/schemas/Member" }, issued_coupons: { type: array, maxItems: 0, items: { $ref: "#/components/schemas/Coupon" } }, issued_benefits: { type: array, items: { $ref: "#/components/schemas/Grant" } }, new_member_entitlement: { allOf: [{ $ref: "#/components/schemas/Entitlement" }], nullable: true } } } } }
+    EntitlementResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [entitlement], properties: { entitlement: { allOf: [{ $ref: "#/components/schemas/Entitlement" }], nullable: true } } } } }
+    ClaimResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [entitlement, grants], properties: { entitlement: { $ref: "#/components/schemas/Entitlement" }, grants: { type: array, items: { $ref: "#/components/schemas/Grant" } } } } } }
+    GrantPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { $ref: "#/components/schemas/Grant" } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    EventPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { $ref: "#/components/schemas/BenefitEvent" } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    RegistrationReferralPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { type: object, required: [referrer_member_id, referred_member_id, registered_at, rewards], properties: { referrer_member_id: { type: string }, referred_member_id: { type: string }, registered_at: { type: string, format: date-time }, rewards: { type: array, items: { type: object, required: [recipient_side, campaign_id, status], properties: { recipient_side: { type: string, enum: [referrer, referred] }, campaign_id: { type: string }, status: { type: string, enum: [issued, skipped] }, grant_id: { type: string }, reason: { type: string } } } } } } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
+    OperationAuditLog: { type: object, required: [id, occurred_at, staff_id, username, client_ip, request_id, action, method, route_template, target_type, target_id, outcome, http_status, reason_code, details], properties: { id: { type: integer }, occurred_at: { type: string, format: date-time }, staff_id: { type: string, nullable: true }, username: { type: string, nullable: true }, client_ip: { type: string, nullable: true }, request_id: { type: string }, action: { type: string }, method: { type: string }, route_template: { type: string }, target_type: { type: string }, target_id: { type: string, nullable: true }, outcome: { type: string, enum: [success, rejected, failed, replayed] }, http_status: { type: integer }, reason_code: { type: string, nullable: true }, details: { type: object } } }
+    OperationAuditPageResponse: { type: object, required: [code, message, data], properties: { code: { type: integer, enum: [0] }, message: { type: string }, data: { type: object, required: [items, page, page_size, total], properties: { items: { type: array, items: { $ref: "#/components/schemas/OperationAuditLog" } }, page: { type: integer }, page_size: { type: integer }, total: { type: integer } } } } }
     DemoState:
       type: object
       required: [member_count, order_count, coupon_count, wallet_ledger_count, referral_reward_count, audit_log_count, simulated_date, immediate_settlement]

@@ -16,6 +16,7 @@ test("home reloads summary after returning from another page without double load
     globalData: {
       launchContext: {},
       api: {
+        async getCapabilities() { return { configured_booking: true }; },
         async getHome() {
           requests += 1;
           return {

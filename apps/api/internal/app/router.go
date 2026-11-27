@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -78,7 +79,7 @@ func NewRouter(service *Service) http.Handler {
 			respond(c, gin.H{}, service.live.Revoke(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))))
 		})
 	}
-	member.POST("/members/join", func(c *gin.Context) {
+	member.POST("/members/join", legacyWrite(service), func(c *gin.Context) {
 		var req JoinMemberRequest
 		if !bindJSON(c, &req) {
 			return
@@ -102,7 +103,7 @@ func NewRouter(service *Service) http.Handler {
 		result, err := service.GetWallet(c.Request.Context(), memberID(c))
 		respond(c, result, err)
 	})
-	member.POST("/bookings", func(c *gin.Context) {
+	member.POST("/bookings", legacyWrite(service), func(c *gin.Context) {
 		var req CreateBookingRequest
 		if !bindJSON(c, &req) {
 			return
@@ -111,6 +112,12 @@ func NewRouter(service *Service) http.Handler {
 		respond(c, gin.H{"order": result}, err)
 	})
 	member.GET("/bookings/my", func(c *gin.Context) {
+		if service.mode != "local-demo" {
+			configuredHandler(service, false, func(c *gin.Context, store *Store, _ map[string]json.RawMessage, _ time.Time) (any, error) {
+				return gin.H{"items": configuredOrders(store, memberID(c), "")}, nil
+			})(c)
+			return
+		}
 		result, err := service.ListMyBookings(c.Request.Context(), memberID(c))
 		respond(c, gin.H{"items": result}, err)
 	})
@@ -130,6 +137,7 @@ func NewRouter(service *Service) http.Handler {
 	})
 
 	admin := api.Group("/admin")
+	attachConfigured(api, admin, service)
 	admin.POST("/auth/login", limited(limiter, 5, time.Minute), func(c *gin.Context) {
 		var req AdminLoginRequest
 		if !bindJSON(c, &req) {
@@ -161,15 +169,25 @@ func NewRouter(service *Service) http.Handler {
 		respond(c, result, err)
 	})
 	adminAuthed.GET("/bookings", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
+		if service.mode != "local-demo" {
+			configuredHandler(service, false, func(c *gin.Context, store *Store, _ map[string]json.RawMessage, _ time.Time) (any, error) {
+				status := c.Query("status")
+				if status != "" && !validBookingStatus(BookingStatus(status)) && status != "booked" && status != "no_show" {
+					return nil, invalid("status")
+				}
+				return configuredPage(c, configuredOrders(store, "", status)), nil
+			})(c)
+			return
+		}
 		result, err := service.ListBookings(c.Request.Context(), BookingStatus(c.Query("status")), page(c), pageSize(c))
 		respondStaff(c, service, result, err)
 	})
-	adminAuthed.PATCH("/bookings/:order_id/status", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
+	adminAuthed.PATCH("/bookings/:id/status", legacyWrite(service), requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {
 		var req UpdateBookingStatusRequest
 		if !bindJSON(c, &req) {
 			return
 		}
-		result, err := service.UpdateBookingStatus(c.Request.Context(), staffID(c), c.Param("order_id"), req)
+		result, err := service.UpdateBookingStatus(c.Request.Context(), staffID(c), c.Param("id"), req)
 		respondStaff(c, service, gin.H{"order": result}, err)
 	})
 	adminAuthed.GET("/members", requireRoles(service, RoleBoss, RoleManager, RoleFrontdesk), func(c *gin.Context) {

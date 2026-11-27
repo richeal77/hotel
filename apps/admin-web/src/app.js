@@ -1,4 +1,5 @@
 export const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
+import { createOperations } from "./operations.js";
 const appConfig = typeof window === "undefined"
   ? { appEnv: "local-demo", apiBaseUrl: DEFAULT_API_BASE_URL, proxyEnabled: false }
   : (window.ADMIN_CONFIG || { appEnv: "production", apiBaseUrl: "/api/v1", proxyEnabled: false });
@@ -16,7 +17,9 @@ const roleTabs = {
 };
 
 export function allowedTabs(role, appEnv) {
-  return (roleTabs[role] || []).filter((tab) => tab !== "demo" || appEnv === "local-demo");
+  if (!roleTabs[role]) return [];
+  return [...roleTabs[role].filter((tab) => tab !== "demo" || appEnv === "local-demo"),
+    "rooms", "inventory", "campaigns", "configuredOrders", "benefits", "operationLogs"];
 }
 
 const statusText = {
@@ -66,6 +69,14 @@ const state = {
 export function sanitizeApiBaseUrl(value) {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
   return trimmed || DEFAULT_API_BASE_URL;
+}
+
+export function nonJsonApiError(path, status) {
+  const error = new Error(status === 404
+    ? `接口未部署：${path}（HTTP 404）。请更新并重启 API 服务。`
+    : `接口返回不是 JSON：${path}（HTTP ${status}）`);
+  error.status = status;
+  return error;
 }
 
 export function nextBookingStatus(status) {
@@ -172,14 +183,47 @@ async function api(path, options = {}) {
   try {
     payload = await response.json();
   } catch {
-    throw new Error(`接口返回不是 JSON：HTTP ${response.status}`);
+    throw nonJsonApiError(path, response.status);
   }
 
   if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || `请求失败：HTTP ${response.status}`);
+    const reason = payload.data?.reason;
+    const error = new Error([payload.message || `请求失败：HTTP ${response.status}`, reason].filter(Boolean).join(" · "));
+    error.status = response.status;
+    error.reason = reason;
+    throw error;
   }
   return payload.data;
 }
+
+async function downloadCsv(path, filename) {
+  const response = await fetch(apiUrl(path), {
+    headers: { Accept: "text/csv", Authorization: `Bearer ${state.token}` }
+  });
+  if (response.status === 401) {
+    clearStaffSession();
+    throw new Error("登录已失效，请重新登录");
+  }
+  if (!response.ok) {
+    let payload = null;
+    try { payload = await response.json(); } catch { /* Non-JSON gateway errors have no structured reason. */ }
+    const error = new Error(payload?.message || `导出失败：HTTP ${response.status}`);
+    error.status = response.status;
+    error.reason = payload?.data?.reason;
+    throw error;
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+const operations = createOperations({ api, downloadCsv, notify: setToast, render: () => render() });
 
 function setToast(message, type = "success") {
   state.toast = { message, type };
@@ -356,6 +400,7 @@ async function loadAuditLogs(page = state.auditPage) {
 }
 
 async function loadActiveTab() {
+  if (operations.hasTab(state.activeTab)) return operations.view(state.activeTab);
   if (state.activeTab === "dashboard") await loadDashboard();
   if (state.activeTab === "orders") await loadBookings();
   if (state.activeTab === "audit") await loadAuditLogs();
@@ -429,7 +474,8 @@ function renderShell() {
     ["orders", "订单管理"],
     ["redemption", "券核销"],
     ["audit", "审计日志"],
-    ["demo", "Demo 控制台"]
+    ["demo", "Demo 控制台"],
+    ...operations.tabs
   ].filter(([key]) => allowedTabs(state.staff?.role, appConfig.appEnv).includes(key));
   return `
     <header class="topbar">
@@ -458,6 +504,7 @@ function renderShell() {
 }
 
 function renderActiveTab() {
+  if (operations.hasTab(state.activeTab)) return operations.html(state.activeTab);
   if (state.activeTab === "orders") {
     return renderOrders();
   }
@@ -783,6 +830,7 @@ function render() {
 }
 
 function bindEvents() {
+  operations.bind(state.activeTab);
   document.querySelector("#loginForm")?.addEventListener("submit", login);
   document.querySelector("#logoutBtn")?.addEventListener("click", async () => {
     if (appConfig.appEnv !== "local-demo") {

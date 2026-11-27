@@ -14,7 +14,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-//go:embed migrations/001_init.sql
+//go:embed migrations/*.sql
 var migrations embed.FS
 
 type MySQLRepository struct{ DB *sql.DB }
@@ -40,17 +40,19 @@ func OpenMySQL(dsn string) (*MySQLRepository, error) {
 }
 
 func MigrateMySQL(ctx context.Context, db *sql.DB) error {
-	raw, err := migrations.ReadFile("migrations/001_init.sql")
-	if err != nil {
-		return err
-	}
-	for _, statement := range strings.Split(string(raw), ";") {
-		statement = strings.TrimSpace(statement)
-		if statement == "" {
-			continue
+	for _, name := range []string{"migrations/001_init.sql", "migrations/002_configured_booking.sql"} {
+		raw, err := migrations.ReadFile(name)
+		if err != nil {
+			return err
 		}
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("schema migration: %w", err)
+		for _, statement := range strings.Split(string(raw), ";") {
+			statement = strings.TrimSpace(statement)
+			if statement == "" {
+				continue
+			}
+			if _, err := db.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("schema migration: %w", err)
+			}
 		}
 	}
 	rule, err := json.Marshal(SeedStore().RuleConfig)
@@ -66,7 +68,7 @@ func MigrateMySQL(ctx context.Context, db *sql.DB) error {
 
 func CheckMySQLSchema(ctx context.Context, db *sql.DB) error {
 	var version int
-	return db.QueryRowContext(ctx, "SELECT version FROM schema_migrations WHERE version=1").Scan(&version)
+	return db.QueryRowContext(ctx, "SELECT version FROM schema_migrations WHERE version=2").Scan(&version)
 }
 
 var mysqlTables = []struct {
@@ -229,7 +231,61 @@ func loadStore(ctx context.Context, tx *sql.Tx) (Store, error) {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return store, err
 	}
+	if err := tx.QueryRowContext(ctx, "SELECT payload FROM configured_booking_store WHERE id=1").Scan(&raw); err != nil {
+		return store, err
+	}
+	if err := json.Unmarshal(raw, &store.Configured); err != nil {
+		return store, err
+	}
+	if err := loadConfiguredQuotes(ctx, tx, &store.Configured); err != nil {
+		return store, err
+	}
 	return store, nil
+}
+
+func loadConfiguredQuotes(ctx context.Context, tx *sql.Tx, store *configuredStore) error {
+	rows, err := tx.QueryContext(ctx, "SELECT id, payload FROM configured_booking_quotes")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	store.Quotes = make(map[string]savedQuote)
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return err
+		}
+		var quote savedQuote
+		if err := json.Unmarshal(raw, &quote); err != nil {
+			return err
+		}
+		store.Quotes[id] = quote
+	}
+	return rows.Err()
+}
+
+func saveConfiguredQuotes(ctx context.Context, tx *sql.Tx, before, after map[string]savedQuote) error {
+	for id := range before {
+		if _, ok := after[id]; !ok {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM configured_booking_quotes WHERE id=?", id); err != nil {
+				return err
+			}
+		}
+	}
+	for id, quote := range after {
+		if old, ok := before[id]; ok && reflect.DeepEqual(old, quote) {
+			continue
+		}
+		raw, err := json.Marshal(quote)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO configured_booking_quotes (id, expires_at, payload) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE payload=VALUES(payload)", id, quote.Quote.ExpiresAt.UTC(), string(raw)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func cloneStore(store Store) (Store, error) {
@@ -269,6 +325,20 @@ func tableRows(value any, keyFn func(json.RawMessage) ([]any, error)) (map[strin
 }
 
 func saveStore(ctx context.Context, tx *sql.Tx, before, store *Store) error {
+	previous, next := before.Configured, store.Configured
+	if err := saveConfiguredQuotes(ctx, tx, previous.Quotes, next.Quotes); err != nil {
+		return err
+	}
+	previous.Quotes, next.Quotes = nil, nil
+	if !reflect.DeepEqual(previous, next) {
+		raw, err := json.Marshal(next)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE configured_booking_store SET payload=? WHERE id=1", string(raw)); err != nil {
+			return err
+		}
+	}
 	for _, table := range mysqlTables {
 		oldRows, err := tableRows(table.get(before), table.keys)
 		if err != nil {

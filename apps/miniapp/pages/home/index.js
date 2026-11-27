@@ -19,7 +19,8 @@ Page({
     referralCount: 0,
     rewardText: "¥0.00",
     isPhoneBound: false,
-    loadError: ""
+    loadError: "",
+    bookingEnabled: false
   },
 
   onLoad(options) {
@@ -54,6 +55,8 @@ Page({
       const app = getApp();
       await app.ensureLogin();
       const home = await app.globalData.api.getHome();
+      const bookingEnabled = app.getRuntimeStatus().apiMode === "local-demo"
+        ? true : Boolean((await app.globalData.api.getCapabilities()).configured_booking);
       const tags = home.hotel && home.hotel.tags ? home.hotel.tags : [];
 
       this.setData({
@@ -66,12 +69,14 @@ Page({
         couponCount: home.coupon_count || 0,
         bookingCount: home.booking_count || 0,
         referralCount: home.referral_summary ? home.referral_summary.referred_count : 0,
-        rewardText: money(home.referral_summary ? home.referral_summary.available_reward_cent : 0)
+        rewardText: money(home.referral_summary ? home.referral_summary.available_reward_cent : 0),
+        bookingEnabled
       });
       this.syncRuntimeState();
     } catch (error) {
       this.setData({
         loadError: error.message || "首页加载失败",
+        bookingEnabled: false,
         hotelAddress: "", hotelPhone: "", hotelTagsText: "", priceText: "--",
         walletText: "--", couponCount: 0, bookingCount: 0, referralCount: 0, rewardText: "--"
       });

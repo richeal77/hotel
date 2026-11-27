@@ -1,11 +1,14 @@
 # Interface Contract
 
-This directory contains the implemented phase 1 demo contract and planned phase 2 additions.
+This directory contains the implemented demo/live-auth contract and the room-pricing/benefits contract. `0.4.0-draft` is frozen for M1 implementation by the checksums in `room-benefits-handoff.md`, but its new operations are not deployed or approved for production.
 
 Canonical contract:
 
 - `openapi.yaml`
 - `phase-2-changes.md` lists contract changes and implementation status.
+- `room-benefits-examples.json` is the shared backend, admin-web and miniapp fixture set for `0.4.0-draft`.
+- `room-benefits-decisions.md` records D1-D7 store answers and acceptance rules.
+- `room-benefits-handoff.md` records release gates, switches and rollback prerequisites.
 
 Rules for all AI workers and developers:
 

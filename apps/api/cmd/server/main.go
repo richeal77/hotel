@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"gaobeidian-shangkeyou-miniapp/apps/api/internal/app"
 )
@@ -47,6 +48,17 @@ func main() {
 	} else {
 		log.Fatalf("unsupported APP_ENV %q", mode)
 	}
+
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			if err := service.RunNoShows(); err != nil {
+				log.Printf("no-show processing failed: %v", err)
+			}
+			<-ticker.C
+		}
+	}()
 
 	log.Printf("api environment=%s listening on %s", mode, addr)
 	if err := http.ListenAndServe(addr, app.NewRouter(service)); err != nil {

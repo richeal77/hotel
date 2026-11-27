@@ -92,7 +92,8 @@ function createApiClient(options) {
       path: descriptor.path,
       query: descriptor.query || {},
       data: descriptor.data || {},
-      auth: descriptor.auth !== false
+      auth: descriptor.auth !== false,
+      idempotencyKey: descriptor.idempotencyKey
     };
 
     if (demoOnly) {
@@ -107,6 +108,7 @@ function createApiClient(options) {
     if (requestDescriptor.auth && token) {
       header.Authorization = `Bearer ${token}`;
     }
+    if (requestDescriptor.idempotencyKey) header["Idempotency-Key"] = requestDescriptor.idempotencyKey;
 
     return new Promise((resolve, reject) => {
       const requestOptions = {
@@ -131,6 +133,18 @@ function createApiClient(options) {
   }
 
   return {
+    getCapabilities() {
+      return send({ path: "/mini/capabilities", auth: false });
+    },
+    getRoomTypes(checkinDate, checkoutDate) {
+      return send({ path: "/mini/room-types", query: { checkin_date: checkinDate, checkout_date: checkoutDate }, auth: false });
+    },
+    createQuote(payload, idempotencyKey) {
+      return send({ method: "POST", path: "/bookings/quotes", data: payload, idempotencyKey });
+    },
+    submitConfiguredBooking(payload, idempotencyKey) {
+      return send({ method: "POST", path: "/bookings/configured", data: payload, idempotencyKey });
+    },
     mockLogin(payload) {
       return send({
         method: "POST",

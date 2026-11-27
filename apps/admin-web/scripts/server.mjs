@@ -51,7 +51,7 @@ async function proxyRequest(req, res, target) {
 
   const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readRequestBody(req);
   const headers = {};
-  for (const name of ["authorization", "content-type"]) {
+  for (const name of ["authorization", "content-type", "idempotency-key"]) {
     if (req.headers[name]) {
       headers[name] = req.headers[name];
     }

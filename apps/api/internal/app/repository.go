@@ -9,6 +9,7 @@ import (
 )
 
 type Store struct {
+	Configured        configuredStore       `json:"configured"`
 	Members           []Member              `json:"members"`
 	StaffUsers        []StaffAccount        `json:"staff_users"`
 	Orders            []BookingOrder        `json:"orders"`
@@ -55,26 +56,35 @@ func (r *JSONRepository) View(fn func(*Store) error) error {
 func (r *JSONRepository) Update(fn func(*Store) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := fn(&r.store); err != nil {
+	next, err := cloneStore(r.store)
+	if err != nil {
 		return err
 	}
-	return r.writeAllLocked()
+	if err := fn(&next); err != nil {
+		return err
+	}
+	return r.commitLocked(next)
 }
 
 func (r *JSONRepository) Replace(store Store) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.store = store
-	return r.writeAllLocked()
+	return r.commitLocked(store)
 }
 
 func (r *JSONRepository) loadOrSeed() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	raw, err := os.ReadFile(filepath.Join(r.dir, "store.json"))
+	if err == nil {
+		return json.Unmarshal(raw, &r.store)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 
 	if !r.allFilesExistLocked() {
-		r.store = SeedStore()
-		return r.writeAllLocked()
+		return r.commitLocked(SeedStore())
 	}
 
 	readers := []struct {
@@ -104,7 +114,7 @@ func (r *JSONRepository) loadOrSeed() error {
 			return err
 		}
 	}
-	return nil
+	return r.commitLocked(r.store)
 }
 
 func (r *JSONRepository) allFilesExistLocked() bool {
@@ -116,30 +126,11 @@ func (r *JSONRepository) allFilesExistLocked() bool {
 	return true
 }
 
-func (r *JSONRepository) writeAllLocked() error {
-	writers := []struct {
-		name string
-		data interface{}
-	}{
-		{"members.json", r.store.Members},
-		{"staff_users.json", r.store.StaffUsers},
-		{"orders.json", r.store.Orders},
-		{"coupon_templates.json", r.store.CouponTemplates},
-		{"coupon_instances.json", r.store.Coupons},
-		{"wallet_accounts.json", r.store.WalletAccounts},
-		{"wallet_ledgers.json", r.store.WalletLedgers},
-		{"referral_relations.json", r.store.ReferralRelations},
-		{"referral_rewards.json", r.store.ReferralRewards},
-		{"audit_logs.json", r.store.AuditLogs},
-		{"notifications.json", r.store.Notifications},
-		{"rule_config.json", r.store.RuleConfig},
+func (r *JSONRepository) commitLocked(store Store) error {
+	if err := writeJSONFile(filepath.Join(r.dir, "store.json"), store); err != nil {
+		return err
 	}
-
-	for _, writer := range writers {
-		if err := writeJSONFile(filepath.Join(r.dir, writer.name), writer.data); err != nil {
-			return err
-		}
-	}
+	r.store = store
 	return nil
 }
 
